@@ -57,7 +57,7 @@ export function MemoryDirector({ timeline, trip, active, onActivate }: MemoryDir
     setNotice(undefined)
     setRequestRecords((records) => [{ time: started.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), status: 'Sending' }, ...records].slice(0, 5))
     const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), 32_000)
+    const timeout = window.setTimeout(() => controller.abort(), 57_000)
     try {
       const response = await fetch('/.netlify/functions/direct-memory', {
         method: 'POST',

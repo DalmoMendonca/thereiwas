@@ -1,5 +1,18 @@
 # Build log
 
+## 2026-07-20 - Direct-testing rebuild
+
+- Replaced the landing page with one no-scroll import screen, a real three-trip sample, and the exact Google Maps export path.
+- Cut the sample from the supplied Timeline export and verified that it detects exactly California, New York, and Italy.
+- Added the missing Mapbox and OpenAI environment variables to production, deploy-preview, and branch-deploy contexts.
+- Rebuilt sparse ground routes with Mapbox Directions, reconstructed gaps between legs, pinned both ends to Home, and versioned the route cache.
+- Replaced the production minifier after browser testing found release-only map errors.
+- Added local EXIF photo parsing, IndexedDB photo storage, map markers, a filmstrip, timestamp scrubbing, and a synchronized replay viewport.
+- Added favicon, Apple touch icon, Open Graph metadata, and a social card captured from the real California route.
+- Verified a live GPT-5.6 Structured Output with four chapters, nine named destinations, and no unnamed stops.
+- Passed 20 unit tests, all six desktop/mobile browser runs, private 15,989-record import acceptance, bundle secret scanning, and manual desktop/mobile visual checks.
+- Published deploy `6a5e49129efd2d5cc0281670` to `thereiwas.dalmo.ai` and repeated the private golden path against production: 28 trips, 55 map requests, a coordinate-free dossier, a live GPT-5.6 story, no unnamed stops, and no browser console errors.
+
 ## 2026-07-19 — Foundation and golden path
 
 - Converted the authoritative spec into a product design contract.
@@ -24,9 +37,8 @@
 - Linked the GitHub repository to Netlify for branch and pull-request deploys.
 - Passed the hosted golden path in desktop Chromium and mobile WebKit.
 
-## Remaining submission operations
+## Submission status
 
-- Run the final custom-domain E2E and secret scan after the release push.
-- Tag `v1.0.0-build-week` and create the GitHub release.
-- Record and publish the sub-three-minute narrated demo.
-- Fill the Devpost draft and record the judge rubric assessment.
+- The current Devpost copy and 91/100 jury assessment are complete in `docs/devpost-submission.md` and `docs/judge-rubric.md`.
+- The Devpost browser session expired before the draft could be saved. GitHub and Google OAuth both require a fresh sign-in.
+- The existing video remains unchanged. A new recording is intentionally held until the final product is approved.

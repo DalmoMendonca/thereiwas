@@ -239,6 +239,7 @@ function buildTrip(
     destinations,
     visitIds: visits.map((visit) => visit.id),
     legIds: legs.map((leg) => leg.id),
+    home: { name: 'Home', coordinate: home.coordinate },
     evidence: {
       start: range.start,
       end: range.end,

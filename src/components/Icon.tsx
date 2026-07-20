@@ -1,6 +1,6 @@
 import type { SVGProps } from 'react'
 
-export type IconName = 'arrow' | 'back' | 'calendar' | 'check' | 'chevron' | 'close' | 'edit' | 'flight' | 'lock' | 'map' | 'pause' | 'play' | 'plus' | 'route' | 'spark' | 'trash' | 'upload'
+export type IconName = 'arrow' | 'back' | 'calendar' | 'check' | 'chevron' | 'close' | 'edit' | 'flight' | 'lock' | 'map' | 'pause' | 'photo' | 'play' | 'plus' | 'route' | 'spark' | 'trash' | 'upload'
 
 const paths: Record<IconName, React.ReactNode> = {
   arrow: <path d="m5 12 14 0m-5-5 5 5-5 5" />,
@@ -14,6 +14,7 @@ const paths: Record<IconName, React.ReactNode> = {
   lock: <><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
   map: <><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3Z" /><path d="M9 3v15m6-12v15" /></>,
   pause: <><path d="M8 5v14M16 5v14" /></>,
+  photo: <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9" r="1.5" /><path d="m4 17 4.5-4.5 3.5 3 2.5-2.5 5.5 5" /></>,
   play: <path d="m8 5 11 7-11 7Z" />,
   plus: <path d="M12 5v14M5 12h14" />,
   route: <><circle cx="6" cy="18" r="2" /><circle cx="18" cy="6" r="2" /><path d="M8 18h3a2 2 0 0 0 2-2V8a2 2 0 0 1 2-2h1" /></>,
@@ -29,4 +30,3 @@ export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconN
     </svg>
   )
 }
-

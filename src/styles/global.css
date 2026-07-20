@@ -90,10 +90,9 @@ summary:focus-visible {
   margin: 0 auto;
   padding: 0 var(--gutter);
   display: grid;
-  grid-template-rows: 84px 1fr 72px;
+  grid-template-rows: 1fr 72px;
   overflow: hidden;
 }
-.landing-header { display: flex; align-items: center; }
 .landing-main {
   align-self: center;
   width: min(100%, 470px);
@@ -111,7 +110,9 @@ summary:focus-visible {
   letter-spacing: -0.065em;
 }
 .landing-main p { max-width: 38ch; margin-bottom: 1.8rem; color: var(--ink-soft); line-height: 1.55; }
+.landing-actions { display: flex; align-items: center; justify-content: center; gap: 0.65rem; }
 .landing-import { min-height: 50px; padding: 0.8rem 1.15rem; }
+.landing-main .export-instructions { max-width: 54ch; margin: 1rem 0 0; color: var(--ink-faint); font-size: 0.72rem; line-height: 1.45; }
 .landing-return { margin-top: 0.5rem; font-size: 0.85rem; }
 .landing > .signature-footer { align-self: center; text-align: center; }
 
@@ -192,6 +193,9 @@ input:hover, textarea:hover { border-color: var(--line-strong); }
 .fit-route { position: absolute; z-index: 2; left: 12px; bottom: 32px; min-height: 36px; padding: 0.45rem 0.65rem; border: 1px solid rgba(0,0,0,0.16); border-radius: 6px; background: rgba(255,255,255,0.94); font-size: 0.75rem; font-weight: 650; }
 .fit-route:hover { background: white; }
 .map-loading { position: absolute; z-index: 3; inset: 0; display: grid; place-items: center; background: rgba(251,251,248,0.92); color: var(--ink-soft); font-size: 0.85rem; }
+.map-photo-viewport { position: absolute; z-index: 2; right: 12px; bottom: 32px; width: min(34%, 250px); margin: 0; padding: 5px; border-radius: 7px; background: rgba(255,255,255,0.96); box-shadow: 0 8px 30px rgba(23,24,21,0.18); }
+.map-photo-viewport img { display: block; width: 100%; max-height: 230px; border-radius: 4px; object-fit: cover; }
+.map-photo-viewport figcaption { padding: 0.4rem 0.15rem 0.05rem; color: var(--ink-soft); font-size: 0.68rem; display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
 .replay-panel { padding: 1.25rem; border-left: 1px solid var(--line); display: flex; flex-direction: column; justify-content: space-between; gap: 2rem; }
 .trip-stats { display: grid; gap: 0; }
 .trip-stats > div { padding: 0.8rem 0; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; justify-content: space-between; gap: 0.7rem; }
@@ -206,6 +210,22 @@ input:hover, textarea:hover { border-color: var(--line-strong); }
 .maplibregl-ctrl-top-right { top: 8px; right: 8px; }
 .maplibregl-ctrl-group { box-shadow: none; border: 1px solid rgba(0,0,0,0.14); }
 .trip-below-map { padding: 1.5rem 0 0; }
+.trip-photos { width: min(var(--content), calc(100% - 2 * var(--gutter))); margin: 1.5rem auto 0; padding: 1rem 0 1.25rem; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.trip-photos > header { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.trip-photos > header > div { display: flex; align-items: baseline; gap: 0.65rem; }
+.trip-photos h2 { margin: 0; font-size: 1rem; }
+.trip-photos header span, .photo-notice { color: var(--ink-faint); font-size: 0.72rem; }
+.photo-notice { margin: 0.5rem 0 0; line-height: 1.45; }
+.photo-strip { margin-top: 0.9rem; padding: 2px 2px 8px; display: grid; grid-auto-flow: column; grid-auto-columns: 132px; gap: 0.7rem; overflow-x: auto; scroll-snap-type: x proximity; }
+.photo-thumb { position: relative; scroll-snap-align: start; }
+.photo-thumb > button:first-child { width: 100%; padding: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: white; text-align: left; }
+.photo-thumb > button:first-child:hover { border-color: var(--line-strong); }
+.photo-thumb.is-active > button:first-child { border-color: var(--green); box-shadow: 0 0 0 2px var(--green-pale); }
+.photo-thumb img { display: block; width: 100%; height: 92px; object-fit: cover; }
+.photo-thumb > button:first-child span { display: block; padding: 0.42rem 0.5rem; color: var(--ink-soft); font-size: 0.68rem; }
+.photo-remove { position: absolute; top: 5px; right: 5px; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: rgba(23,24,21,0.78); color: white; display: grid; place-items: center; opacity: 0; }
+.photo-remove svg { width: 14px; height: 14px; }
+.photo-thumb:hover .photo-remove, .photo-remove:focus-visible { opacity: 1; }
 .destination-line { margin-bottom: 1.3rem; color: var(--ink-soft); font-size: 0.9rem; line-height: 1.6; }
 .trip-details { padding: 0.4rem 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--ink-soft); font-size: 0.82rem; }
 .trip-details ul { padding-left: 1.2rem; line-height: 1.55; }
@@ -258,8 +278,10 @@ input:hover, textarea:hover { border-color: var(--line-strong); }
 .error-toast .button-icon { width: 36px; height: 36px; color: white; }
 
 @media (max-width: 760px) {
-  .landing { min-height: 480px; grid-template-rows: 64px 1fr 60px; }
+  .landing { min-height: 480px; grid-template-rows: 1fr 60px; }
   .landing-main h1 { font-size: clamp(2.65rem, 15vw, 4rem); }
+  .landing-actions { width: 100%; flex-direction: column; }
+  .landing-actions .button-primary, .landing-actions .button-secondary { width: min(100%, 260px); }
   .app-nav, .trip-nav { height: 64px; }
   .app-nav .button-primary { padding: 0.65rem 0.8rem; }
   .trip-nav .brand-mark { display: none; }
@@ -270,6 +292,7 @@ input:hover, textarea:hover { border-color: var(--line-strong); }
   .trip-replay { grid-template-columns: 1fr; }
   .map-stage { height: min(62vh, 560px); min-height: 430px; }
   .fit-route { top: 84px; bottom: auto; }
+  .map-photo-viewport { width: min(44%, 190px); bottom: 16px; }
   .replay-panel { padding: 1rem; border-top: 1px solid var(--line); border-left: 0; }
   .trip-stats { grid-template-columns: 1fr 1fr; column-gap: 1.25rem; }
   .replay-controls { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; }

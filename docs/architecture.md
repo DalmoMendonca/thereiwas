@@ -11,6 +11,7 @@ Timeline JSON
   -> unique trip records
   -> route reconstruction
   -> MapLibre playback
+  -> local EXIF photo moments
   -> IndexedDB
 
 selected trip
@@ -44,11 +45,17 @@ Destinations are grouped by named city and retained when the record shows at lea
 Every route segment retains provenance:
 
 - `observed`: points recorded in Timeline
-- `enhanced`: Mapbox Directions for a sparse driving, walking, or cycling leg when a token is configured
+- `enhanced`: Mapbox Directions for sparse driving, walking, or cycling evidence and missing ground joins
 - `great-circle`: a flight without a recorded path
 - `fallback`: a straight, visibly dashed connection when local evidence is incomplete
 
-MapLibre renders those segments over OpenFreeMap vector tiles derived from OpenStreetMap, with visible attribution. The map fits the entire home-to-home route, remains static during playback, and keeps the complete route visible. A single animation clock advances the green progress line and orange current-position marker. React does not rerender on every frame.
+Sparse evidence is detected by measuring the distance between consecutive recorded points, with mode-specific thresholds for driving, walking, and cycling. Adjacent leg gaps are reconstructed in chronological order. The first and last route coordinates are pinned to Home, including provider routes whose endpoints snap to a nearby road.
+
+MapLibre renders the segments over OpenFreeMap vector tiles derived from OpenStreetMap, with visible attribution. The map fits the entire home-to-home route and keeps it visible. A single animation clock advances the green progress line and orange current-position marker. React does not rerender on every frame.
+
+## Photos
+
+`exifr` reads capture time and GPS metadata from selected image files. Photos outside the trip window or without GPS are rejected. Accepted blobs are stored in an IndexedDB store keyed by trip, sorted by capture time, and exposed to the replay as map points. Selecting a thumbnail maps its timestamp into replay progress. During playback, the latest reached photo becomes the active viewport image.
 
 ## Story
 
@@ -58,4 +65,4 @@ The Netlify Function limits the body to 48 KB, validates it with Zod, applies or
 
 ## Persistence
 
-IndexedDB stores the normalized session, trip records, dismissed trips, selected view, route cache, and up to five prior story drafts. Schema version changes invalidate incompatible derived data rather than trying to display stale shapes. Deleting imported data clears every store.
+IndexedDB stores the normalized session, trip records, dismissed trips, selected view, route cache, photos, and up to five prior story drafts. Schema version changes invalidate incompatible derived data rather than trying to display stale shapes. Deleting imported data clears every store.

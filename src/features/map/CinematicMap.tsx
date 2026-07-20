@@ -13,12 +13,16 @@ import type { RouteGeometry } from '../../domain/route-reconstruction'
 import { tripDistanceKm } from '../../domain/trip-detection'
 import type { NormalizedTimeline, TravelMode, TripRecord } from '../../domain/types'
 import { Icon } from '../../components/Icon'
+import type { DisplayTripPhoto } from '../photos/TripPhotos'
 
 interface CinematicMapProps {
   routes: RouteGeometry[]
   timeline: NormalizedTimeline
   trip: TripRecord
   loading?: boolean
+  photos?: DisplayTripPhoto[]
+  selectedPhotoId?: string
+  onPhotoChange?: (photoId: string) => void
 }
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron'
@@ -52,6 +56,17 @@ function markerData(point?: { lat: number; lng: number }) {
   }
 }
 
+function photoMarkerData(photos: DisplayTripPhoto[]) {
+  return {
+    type: 'FeatureCollection' as const,
+    features: photos.map((photo) => ({
+      type: 'Feature' as const,
+      properties: { id: photo.id },
+      geometry: { type: 'Point' as const, coordinates: [photo.coordinate.lng, photo.coordinate.lat] },
+    })),
+  }
+}
+
 function modeLabel(mode: TravelMode): string {
   const labels: Record<TravelMode, string> = {
     driving: 'Driving',
@@ -70,7 +85,7 @@ function modeLabel(mode: TravelMode): string {
   return labels[mode]
 }
 
-export function CinematicMap({ routes, timeline, trip, loading }: CinematicMapProps) {
+export function CinematicMap({ routes, timeline, trip, loading, photos = [], selectedPhotoId, onPhotoChange }: CinematicMapProps) {
   const container = useRef<HTMLDivElement>(null)
   const map = useRef<MapLibreMap | null>(null)
   const mapLoaded = useRef(false)
@@ -84,7 +99,11 @@ export function CinematicMap({ routes, timeline, trip, loading }: CinematicMapPr
   const timeText = useRef<HTMLSpanElement>(null)
   const modeText = useRef<HTMLSpanElement>(null)
   const placeText = useRef<HTMLSpanElement>(null)
+  const activePhotoIdRef = useRef<string | undefined>(undefined)
+  const photosRef = useRef(photos)
+  photosRef.current = photos
   const [playing, setPlaying] = useState(false)
+  const [activePhotoId, setActivePhotoId] = useState<string>()
 
   const playback = useMemo(() => buildPlaybackTimeline(routes), [routes])
   const keyframes = useMemo(() => buildCinematicKeyframes(routes, playback), [routes, playback])
@@ -128,6 +147,7 @@ export function CinematicMap({ routes, timeline, trip, loading }: CinematicMapPr
       activeMap.addSource('route-full', { type: 'geojson', data: completeRoute })
       activeMap.addSource('route-progress', { type: 'geojson', data: progressData([]) })
       activeMap.addSource('route-marker', { type: 'geojson', data: markerData(playback.points[0]) })
+      activeMap.addSource('route-photos', { type: 'geojson', data: photoMarkerData(photosRef.current) })
       activeMap.addLayer({
         id: 'route-fallback',
         type: 'line',
@@ -162,6 +182,29 @@ export function CinematicMap({ routes, timeline, trip, loading }: CinematicMapPr
           'circle-stroke-width': 3,
         },
       })
+      activeMap.addLayer({
+        id: 'route-photo-points',
+        type: 'circle',
+        source: 'route-photos',
+        paint: {
+          'circle-radius': 4,
+          'circle-color': '#fbfbf8',
+          'circle-stroke-color': '#146b4e',
+          'circle-stroke-width': 2,
+        },
+      })
+      activeMap.addLayer({
+        id: 'route-photo-active',
+        type: 'circle',
+        source: 'route-photos',
+        filter: ['==', ['get', 'id'], ''],
+        paint: {
+          'circle-radius': 9,
+          'circle-color': '#146b4e',
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 3,
+        },
+      })
       fitRoute()
     })
     return () => {
@@ -171,6 +214,11 @@ export function CinematicMap({ routes, timeline, trip, loading }: CinematicMapPr
       mapLoaded.current = false
     }
   }, [completeRoute, fitRoute, playback.points])
+
+  useEffect(() => {
+    if (!mapLoaded.current) return
+    ;(map.current?.getSource('route-photos') as GeoJSONSource | undefined)?.setData(photoMarkerData(photos))
+  }, [photos])
 
   useEffect(() => {
     const activeMap = map.current
@@ -197,13 +245,23 @@ export function CinematicMap({ routes, timeline, trip, loading }: CinematicMapPr
       .sort((a, b) => a.distance - b.distance)[0]
     if (placeText.current) placeText.current.textContent = nearest && nearest.distance < 75 ? nearest.destination.name : modeLabel(state.mode)
 
+    const photo = photos.filter((item) => Date.parse(item.capturedAt) <= Date.parse(state.timestamp)).at(-1)
+    if (photo && activePhotoIdRef.current !== photo.id) {
+      activePhotoIdRef.current = photo.id
+      setActivePhotoId(photo.id)
+      onPhotoChange?.(photo.id)
+      if (mapLoaded.current && map.current?.getLayer('route-photo-active')) {
+        map.current.setFilter('route-photo-active', ['==', ['get', 'id'], photo.id])
+      }
+    }
+
     if (mapLoaded.current && now - lastMapUpdate.current >= 40) {
       lastMapUpdate.current = now
       const progressed = [...playback.points.slice(0, state.pointIndex + 1), state]
       ;(map.current?.getSource('route-progress') as GeoJSONSource | undefined)?.setData(progressData(progressed))
       ;(map.current?.getSource('route-marker') as GeoJSONSource | undefined)?.setData(markerData(state))
     }
-  }, [playback, trip.destinations])
+  }, [onPhotoChange, photos, playback, trip.destinations])
 
   useEffect(() => {
     updateVisuals(0)
@@ -241,6 +299,21 @@ export function CinematicMap({ routes, timeline, trip, loading }: CinematicMapPr
   }
 
   useEffect(() => {
+    if (!selectedPhotoId || selectedPhotoId === activePhotoIdRef.current || !playback.points.length) return
+    const photo = photos.find((item) => item.id === selectedPhotoId)
+    if (!photo) return
+    cancelAnimationFrame(animationFrame.current)
+    setPlaying(false)
+    const progress = Math.max(0, Math.min(1, (Date.parse(photo.capturedAt) - playback.startMs) / Math.max(1, playback.endMs - playback.startMs)))
+    activePhotoIdRef.current = photo.id
+    setActivePhotoId(photo.id)
+    updateVisuals(progress)
+    if (mapLoaded.current && map.current?.getLayer('route-photo-active')) {
+      map.current.setFilter('route-photo-active', ['==', ['get', 'id'], photo.id])
+    }
+  }, [photos, playback, selectedPhotoId, updateVisuals])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
       if (event.code === 'Space') {
@@ -262,6 +335,17 @@ export function CinematicMap({ routes, timeline, trip, loading }: CinematicMapPr
           <span><span ref={dateText} /> <span ref={timeText} /> · <span ref={modeText}>Ready</span></span>
         </div>
         <button className="fit-route" type="button" onClick={fitRoute}>Fit route</button>
+        {activePhotoId && (() => {
+          const photo = photos.find((item) => item.id === activePhotoId)
+          if (!photo) return null
+          const index = photos.findIndex((item) => item.id === photo.id)
+          return (
+            <figure className="map-photo-viewport">
+              <img src={photo.url} alt={photo.name} />
+              <figcaption><span>{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(photo.capturedAt))}</span><span>{index + 1}/{photos.length}</span></figcaption>
+            </figure>
+          )
+        })()}
       </div>
 
       <aside className="replay-panel">

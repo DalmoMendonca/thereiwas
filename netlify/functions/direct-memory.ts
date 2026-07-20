@@ -95,7 +95,15 @@ Rules:
 export const handler: Handler = async (event) => {
   const origin = allowedOrigin(event.headers.origin)
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: { ...headers(origin), 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type' }, body: '' }
+    return { statusCode: 204, headers: { ...headers(origin), 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type' }, body: '' }
+  }
+  if (event.httpMethod === 'GET') {
+    if (event.headers.origin && !origin) return response(403, { error: 'This origin is not allowed.' })
+    return response(200, {
+      ok: true,
+      configured: Boolean(process.env.OPENAI_API_KEY),
+      model: process.env.OPENAI_MODEL || 'gpt-5.6',
+    }, origin)
   }
   if (event.httpMethod !== 'POST') return response(405, { error: 'Use POST for Memory Director requests.' }, origin)
   if (event.headers.origin && !origin) return response(403, { error: 'This origin is not allowed.' })
@@ -124,7 +132,7 @@ export const handler: Handler = async (event) => {
 
   try {
     // Keep enough room to validate and return the deterministic plan if the model is slow.
-    const client = new OpenAI({ apiKey, timeout: 27_000, maxRetries: 0 })
+    const client = new OpenAI({ apiKey, timeout: 52_000, maxRetries: 0 })
     const result = await client.responses.parse({
       model: process.env.OPENAI_MODEL || 'gpt-5.6',
       store: false,

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createManualTrip, detectTrips, inferHome } from '../domain/trip-detection'
 import type { HomeInference, NormalizedTimeline, TripRecord } from '../domain/types'
-import { deleteAllLocalData, loadSession, saveSession } from '../storage/database'
+import { deleteAllLocalData, deleteTripPhotos, loadSession, saveSession } from '../storage/database'
 
 export type AppView = 'home' | 'trips' | 'trip'
 
@@ -138,6 +138,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   deleteTrip: async (tripId) => {
     const state = get()
+    await deleteTripPhotos(tripId)
     set({ trips: state.trips.filter((trip) => trip.id !== tripId), view: 'trips', activeTripId: undefined })
     await persist(get())
   },

@@ -15,10 +15,12 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:local": "playwright test --project=local",
-    "test:privacy": "node scripts/verify-dist.mjs"
+    "test:privacy": "node scripts/verify-dist.mjs",
+    "sample:build": "tsx scripts/build-sample.ts"
   },
   "dependencies": {
     "@js-temporal/polyfill": "0.5.1",
+    "exifr": "7.1.3",
     "idb": "8.0.3",
     "maplibre-gl": "5.24.0",
     "openai": "6.48.0",

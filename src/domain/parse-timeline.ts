@@ -330,7 +330,7 @@ export function parseTimelineRecords(
   if (observedPointCount < Math.max(4, legs.length)) coverageWarnings.push('Some movement legs are sparse and will use explicit inferred geometry.')
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: `dataset-${Date.parse(importedAt).toString(36)}`,
     sourceName,
     importedAt,

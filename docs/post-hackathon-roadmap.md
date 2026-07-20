@@ -2,12 +2,12 @@
 
 Only begin after the submission golden path is stable.
 
-## Next: optional memory texture
+## Next: finish the photo layer
 
-- Local geotagged photo/video import
-- Time-and-distance matching to stops
-- One optional trip cover and a restrained playback filmstrip
-- No media upload to OpenAI or Netlify
+- Add video metadata support beside the current geotagged photo importer
+- Let users correct a photo time or map position when EXIF is wrong
+- Add one optional trip cover selected from the local filmstrip
+- Keep media out of OpenAI and Netlify requests
 
 ## Then: durable personal atlas
 
@@ -28,4 +28,3 @@ Only begin after the submission golden path is stable.
 ## Explicitly still deferred
 
 DuckDB-Wasm, Parquet, Arrow, natural-language SQL, cloud synchronization, nested/overlapping trip accounting, complex media libraries, advanced Overture ingestion, and 4K rendering. Each requires its own product and privacy review rather than competition scaffolding.
-

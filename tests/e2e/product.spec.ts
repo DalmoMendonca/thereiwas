@@ -9,11 +9,34 @@ test('landing is a single, minimal import screen', async ({ page }) => {
 
   await expect(page.getByRole('heading', { name: 'There I Was' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Import Timeline JSON' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Try with Sample Data' })).toBeVisible()
+  await expect(page.getByText('Google Maps app > Settings > Location & privacy > Export Timeline data')).toBeVisible()
   await expect(page.getByText('Build with')).toBeVisible()
-  await expect(page.getByText('sample', { exact: false })).toHaveCount(0)
+  await expect(page.getByText('There I Was', { exact: true })).toHaveCount(1)
 
   const dimensions = await page.evaluate(() => ({ scrollHeight: document.documentElement.scrollHeight, innerHeight: window.innerHeight }))
   expect(dimensions.scrollHeight).toBeLessThanOrEqual(dimensions.innerHeight + 1)
+})
+
+test('real sample data detects exactly the requested three trips', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Try with Sample Data' }).click()
+  await expect(page.getByRole('heading', { name: 'Your trips' })).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator('.trip-row')).toHaveCount(3)
+  await expect(page.locator('.trip-row-copy strong')).toHaveText(['California', 'New York', 'Italy'])
+  await expect(page.locator('.trip-row-copy small')).toHaveText([
+    '06/19/26 - 07/12/26',
+    '10/30/25 - 11/22/25',
+    '06/29/25 - 08/02/25',
+  ])
+
+  await page.locator('.trip-row').first().click()
+  await expect(page.getByRole('heading', { name: 'California' })).toBeVisible()
+  await expect(page.locator('.maplibregl-map')).toBeVisible({ timeout: 20_000 })
+  await expect(page.locator('.map-loading')).toBeHidden({ timeout: 60_000 })
+  await expect(page.getByRole('button', { name: 'Play trip' })).toBeEnabled()
+  await expect(page.getByText(/mi$/).first()).toBeVisible()
 })
 
 test('private Timeline acceptance: named, unique trips and a complete route replay', async ({ page }) => {

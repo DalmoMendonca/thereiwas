@@ -99,7 +99,7 @@ export interface HomeInference {
 }
 
 export interface NormalizedTimeline {
-  schemaVersion: 2
+  schemaVersion: 3
   id: string
   sourceName: string
   importedAt: string
@@ -150,9 +150,24 @@ export interface TripRecord {
   destinations: TripDestination[]
   visitIds: string[]
   legIds: string[]
+  home: {
+    name: string
+    coordinate: Coordinate
+  }
   evidence: TripEvidence
   createdAt: string
   updatedAt: string
+}
+
+export interface TripPhoto {
+  id: string
+  tripId: string
+  name: string
+  mimeType: string
+  size: number
+  capturedAt: string
+  coordinate: Coordinate
+  blob: Blob
 }
 
 export type Certainty = 'observed' | 'inferred' | 'user-supplied'
