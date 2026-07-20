@@ -1,0 +1,19 @@
+Google Timeline remembers almost every place I have been and hands it back as a log. I wanted to press Play.
+
+There I Was turns a Timeline JSON export into trips you can inspect, edit, replay, and remember. This public sample needs no account, API key, or private file. It uses the same worker and inference pipeline as a personal export. Twenty generated records become one Iceland trip, with six nights away, four destinations, flights, drives, a walk, and one deliberately uncertain stop.
+
+Every proposed trip explains itself. Here, the app shows the distance from Home, nights away, travel modes, supporting Timeline Memory, and route coverage.
+
+The replay runs from one deterministic clock. The route draws while the marker moves, the odometer advances, and the local date, time, mode, stops, and camera stay synchronized. Observed paths keep their provenance. Flights use great-circle arcs. Sparse ground legs can use Mapbox Directions, with an honest inferred route when the provider is unavailable.
+
+Memory Director gives GPT-5.6 a compact dossier for this trip. It contains dates, named destinations, summarized legs, coverage gaps, and user answers. It contains zero raw path points and no Home coordinates. The Responses API returns a strict, Zod-validated plan with chapters, grounded highlights, captions, uncertainty notes, and questions about what telemetry cannot know.
+
+When I answer a reflection question, my words become user-supplied evidence. The model can reorganize the story around that answer. The certainty label keeps authorship visible.
+
+I built the core product in one Codex session. Codex wrote the parser and inference tests, separated domain logic from React, drove browser checks, and helped diagnose its own mistakes. One nested visit split this week into two trips. A browser test caught it, and the grouping algorithm now uses the furthest covered end time. Production testing also pushed GPT-5.6 Structured Outputs under Netlify's thirty-second function limit while preserving a local fallback.
+
+Manual trips give the final decision back to the person. Pick dates, name the interval, edit it, and reload. IndexedDB restores the Timeline, trip decisions, route cache, and story versions.
+
+There I Was gives the evidence, GPT-5.6, and the human one clear job each. The result feels less like a database and more like a way back into the day.
+
+This demo uses an AI-generated voice.

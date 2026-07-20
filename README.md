@@ -4,7 +4,7 @@ Turn your Google Timeline into cinematic, editable stories of your life.
 
 ![There I Was turning a Timeline route into a cinematic journey](docs/assets/there-i-was-hero.png)
 
-**[Live demo](https://thereiwas.dalmo.ai)** · Choose **Try a sample journey**—no account, API key, or private file required.
+**[Live demo](https://thereiwas.dalmo.ai)** · **[2:27 demo video](https://youtu.be/yNq8QA40OEM)** · Choose **Try a sample journey**—no account, API key, or private file required.
 
 There I Was finds trips inside a Google Timeline JSON export, reconstructs each route with explicit provenance, and plays the journey back as a synchronized map, clock, odometer, movement trace, and story. The raw Timeline is parsed and persisted locally; GPT-5.6 receives only a bounded dossier for the selected trip. Built for **OpenAI Build Week 2026** in the **Apps for Your Life** category.
 
@@ -143,4 +143,3 @@ The release deliberately excludes lifetime analytics, collaborative accounts, cl
 ## License
 
 [MIT](LICENSE) © 2026 Dalmo Mendonca.
-
