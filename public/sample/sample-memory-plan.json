@@ -1,0 +1,99 @@
+{
+  "title": "The road kept opening east",
+  "oneLineMemory": "A transatlantic jump became a week measured in walks, long roads, and a return arc from Iceland.",
+  "chapters": [
+    {
+      "title": "Across the ocean",
+      "start": "2026-07-03T06:40:00-04:00",
+      "end": "2026-07-03T18:45:00+00:00",
+      "summary": "The route leaves Home, crosses the Atlantic by air, and reaches Reykjavík in the evening."
+    },
+    {
+      "title": "A city at walking pace",
+      "start": "2026-07-03T18:45:00+00:00",
+      "end": "2026-07-05T08:10:00+00:00",
+      "summary": "Nearly two days center on Reykjavík, including an observed walking trace through the city."
+    },
+    {
+      "title": "The long road east",
+      "start": "2026-07-05T08:10:00+00:00",
+      "end": "2026-07-09T14:10:00+00:00",
+      "summary": "The journey follows the south coast through Vík í Mýrdal to Jökulsárlón, then turns back west."
+    },
+    {
+      "title": "The homeward arc",
+      "start": "2026-07-09T14:10:00+00:00",
+      "end": "2026-07-10T15:38:00-04:00",
+      "summary": "One final night in Reykjavík precedes the flight and ground route back Home."
+    }
+  ],
+  "highlights": [
+    {
+      "timestamp": "2026-07-03T08:35:00-04:00",
+      "title": "Leaving the home region",
+      "description": "A 5,334 km flight begins the main geographic transition in the record.",
+      "groundingIds": ["sample-home", "sample-reykjavik"],
+      "certainty": "observed"
+    },
+    {
+      "timestamp": "2026-07-05T08:10:00+00:00",
+      "title": "Turning toward the south coast",
+      "description": "The route changes from city-scale movement to a 187 km drive toward Vík í Mýrdal.",
+      "groundingIds": ["sample-reykjavik", "sample-vik"],
+      "certainty": "observed"
+    },
+    {
+      "timestamp": "2026-07-07T11:50:00+00:00",
+      "title": "Farthest east",
+      "description": "The observed trace reaches Jökulsárlón after the longest ground leg of the journey.",
+      "groundingIds": ["sample-vik", "sample-jokulsarlon"],
+      "certainty": "observed"
+    },
+    {
+      "timestamp": "2026-07-10T15:38:00-04:00",
+      "title": "Back inside the home radius",
+      "description": "A sustained Home visit closes the detected trip boundary.",
+      "groundingIds": ["sample-home"],
+      "certainty": "observed"
+    }
+  ],
+  "captions": [
+    {
+      "timestamp": "2026-07-03T08:35:00-04:00",
+      "text": "The map pulls wide: 5,334 km across the Atlantic.",
+      "groundingIds": ["sample-home", "sample-reykjavik"]
+    },
+    {
+      "timestamp": "2026-07-04T09:10:00+00:00",
+      "text": "For a morning, the record slows to walking pace.",
+      "groundingIds": ["sample-reykjavik"]
+    },
+    {
+      "timestamp": "2026-07-07T11:50:00+00:00",
+      "text": "Three and a half hours east, the route reaches the lagoon.",
+      "groundingIds": ["sample-vik", "sample-jokulsarlon"]
+    },
+    {
+      "timestamp": "2026-07-10T15:38:00-04:00",
+      "text": "The final line closes at Home.",
+      "groundingIds": ["sample-home"]
+    }
+  ],
+  "reflectionQuestions": [
+    {
+      "id": "road-east-detail",
+      "question": "When you think of the long drive east from Vík, what detail returns first?",
+      "reason": "The Timeline records the route and duration, but not what made that stretch memorable to you."
+    },
+    {
+      "id": "reykjavik-walk",
+      "question": "What were you looking for—or avoiding—during the Reykjavík walk?",
+      "reason": "The observed path shows a deliberate two-hour walk, but its purpose is absent from the data."
+    }
+  ],
+  "uncertaintyNotes": [
+    "The brief roadside stop near Vík has low-confidence location evidence, so no activity is assigned to it.",
+    "The route establishes where and when movement occurred; it does not identify companions, purpose, or emotion."
+  ]
+}
+

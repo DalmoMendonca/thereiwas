@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.netlify/
+playwright-report/
+test-results/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+*.local
+*.tsbuildinfo
+*.db
+*.sqlite
+location-history.json
+takeout-*.json
