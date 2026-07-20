@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { coordinateKey, normalizeNumericString, parseGeoCoordinate, parseTimestamp } from './geo'
+import { coordinateKey, haversineKm, normalizeNumericString, parseGeoCoordinate, parseTimestamp } from './geo'
 import type {
   Leg,
   NormalizedTimeline,
@@ -59,19 +59,19 @@ const memorySchema = z.object({
 })
 
 const MODE_MAP: Record<string, TravelMode> = {
-  IN_PASSENGER_VEHICLE: 'driving',
-  IN_VEHICLE: 'driving',
-  MOTORCYCLING: 'driving',
-  WALKING: 'walking',
-  CYCLING: 'cycling',
-  RUNNING: 'running',
-  FLYING: 'flight',
-  IN_TRAIN: 'train',
-  IN_SUBWAY: 'subway',
-  IN_TRAM: 'tram',
-  IN_BUS: 'bus',
-  IN_FERRY: 'ferry',
-  SKIING: 'skiing',
+  'in passenger vehicle': 'driving',
+  'in vehicle': 'driving',
+  motorcycling: 'driving',
+  walking: 'walking',
+  cycling: 'cycling',
+  running: 'running',
+  flying: 'flight',
+  'in train': 'train',
+  'in subway': 'subway',
+  'in tram': 'tram',
+  'in bus': 'bus',
+  'in ferry': 'ferry',
+  skiing: 'skiing',
 }
 
 export function reconstructPathTimestamps(
@@ -96,24 +96,61 @@ function stableId(prefix: string, index: number, start: string): string {
   return `${prefix}-${index}-${Date.parse(start).toString(36)}`
 }
 
-function overlaps(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
-  return Date.parse(aStart) <= Date.parse(bEnd) && Date.parse(bStart) <= Date.parse(aEnd)
+function visitPreference(visit: Visit): number {
+  const semanticType = visit.semanticType?.toLowerCase()
+  const semanticScore = semanticType === 'home' ? 100 : semanticType === 'work' || semanticType === 'inferred work' ? 80 : 0
+  const hierarchyScore = visit.hierarchyLevel === undefined ? 0 : Math.max(0, 10 - visit.hierarchyLevel)
+  return semanticScore + hierarchyScore + (visit.coordinate ? 2 : 0) + (visit.placeId ? 1 : 0)
 }
 
 function deduplicateVisits(visits: Visit[]): Visit[] {
-  const map = new Map<string, Visit>()
+  const groups = new Map<string, Visit[]>()
   for (const visit of visits) {
-    const location = visit.coordinate ? coordinateKey(visit.coordinate, 5) : visit.placeId ?? 'unknown'
-    const key = `${visit.start}|${visit.end}|${location}`
-    const existing = map.get(key)
-    if (existing) {
-      existing.sourceIds.push(...visit.sourceIds)
-      if ((visit.confidence ?? 0) > (existing.confidence ?? 0)) map.set(key, { ...visit, sourceIds: existing.sourceIds })
-    } else {
-      map.set(key, visit)
-    }
+    const key = `${visit.start}|${visit.end}`
+    const group = groups.get(key) ?? []
+    group.push(visit)
+    groups.set(key, group)
   }
-  return [...map.values()].sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
+  return [...groups.values()]
+    .map((group) => {
+      const primary = [...group].sort((a, b) => visitPreference(b) - visitPreference(a) || (b.confidence ?? 0) - (a.confidence ?? 0))[0]
+      return { ...primary, sourceIds: [...new Set(group.flatMap((visit) => visit.sourceIds))] }
+    })
+    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
+}
+
+function inferModeFromPath(points: TimedCoordinate[], start: string, end: string): TravelMode {
+  if (points.length < 2) return 'unknown'
+  let distanceKm = 0
+  for (let index = 1; index < points.length; index += 1) distanceKm += haversineKm(points[index - 1], points[index])
+  const hours = Math.max(1 / 60, (Date.parse(end) - Date.parse(start)) / 3_600_000)
+  const speed = distanceKm / hours
+  if (speed >= 240) return 'flight'
+  if (speed >= 22) return 'driving'
+  if (speed >= 8) return 'cycling'
+  return 'walking'
+}
+
+function findBestMatchingLeg(legs: Leg[], path: { start: string; end: string }): Leg | undefined {
+  const startMs = Date.parse(path.start)
+  const endMs = Date.parse(path.end)
+  let low = 0
+  let high = legs.length
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2)
+    if (Date.parse(legs[middle].start) < startMs) low = middle + 1
+    else high = middle
+  }
+  let best: { leg: Leg; score: number } | undefined
+  for (let index = Math.max(0, low - 10); index < Math.min(legs.length, low + 10); index += 1) {
+    const leg = legs[index]
+    const overlapMs = Math.max(0, Math.min(endMs, Date.parse(leg.end)) - Math.max(startMs, Date.parse(leg.start)))
+    if (!overlapMs) continue
+    const boundaryDelta = Math.abs(Date.parse(leg.start) - startMs) + Math.abs(Date.parse(leg.end) - endMs)
+    const score = overlapMs - boundaryDelta * 0.05
+    if (!best || score > best.score) best = { leg, score }
+  }
+  return best?.leg
 }
 
 export function parseTimelineRecords(
@@ -133,8 +170,18 @@ export function parseTimelineRecords(
 
   rawRecords.forEach((record, sourceIndex) => {
     const sourceId = `source-${sourceIndex}`
-    const visitResult = visitSchema.safeParse(record)
-    if (visitResult.success) {
+    if (!record || typeof record !== 'object') {
+      quarantined.push({ sourceIndex, reason: 'Unsupported or malformed Timeline record.' })
+      return
+    }
+    const recordObject = record as Record<string, unknown>
+
+    if ('visit' in recordObject) {
+      const visitResult = visitSchema.safeParse(record)
+      if (!visitResult.success) {
+        quarantined.push({ sourceIndex, reason: 'Visit is malformed.' })
+        return
+      }
       const start = parseTimestamp(visitResult.data.startTime)
       const end = parseTimestamp(visitResult.data.endTime)
       if (!start || !end || Date.parse(end) < Date.parse(start)) {
@@ -143,6 +190,7 @@ export function parseTimelineRecords(
       }
       const candidate = visitResult.data.visit.topCandidate
       const coordinate = parseGeoCoordinate(candidate?.placeLocation)
+      const placeId = candidate?.placeID ?? (coordinate ? `coordinate-${coordinateKey(coordinate, 4)}` : undefined)
       const id = stableId('visit', sourceIndex, start)
       const confidence = normalizeNumericString(candidate?.probability ?? visitResult.data.visit.probability)
       visits.push({
@@ -150,26 +198,30 @@ export function parseTimelineRecords(
         start,
         end,
         coordinate,
-        placeId: candidate?.placeID,
+        placeId,
         semanticType: candidate?.semanticType,
+        hierarchyLevel: normalizeNumericString(visitResult.data.visit.hierarchyLevel),
         displayName: candidate?.displayName,
         confidence,
         sourceIds: [sourceId],
       })
-      if (coordinate) {
-        const placeId = candidate?.placeID ?? `coordinate-${coordinateKey(coordinate, 4)}`
+      if (coordinate && placeId) {
         places[placeId] = {
           id: placeId,
           coordinate,
           displayName: candidate?.displayName,
-          labelSource: candidate?.displayName ? 'sample' : 'coordinate',
+          labelSource: candidate?.displayName ? 'embedded' : 'coordinate',
         }
       }
       return
     }
 
-    const activityResult = activitySchema.safeParse(record)
-    if (activityResult.success) {
+    if ('activity' in recordObject) {
+      const activityResult = activitySchema.safeParse(record)
+      if (!activityResult.success) {
+        quarantined.push({ sourceIndex, reason: 'Activity is malformed.' })
+        return
+      }
       const start = parseTimestamp(activityResult.data.startTime)
       const end = parseTimestamp(activityResult.data.endTime)
       if (!start || !end || Date.parse(end) < Date.parse(start)) {
@@ -181,7 +233,7 @@ export function parseTimelineRecords(
         id: stableId('leg', sourceIndex, start),
         start,
         end,
-        mode: MODE_MAP[activity.topCandidate?.type ?? ''] ?? 'unknown',
+        mode: MODE_MAP[(activity.topCandidate?.type ?? '').trim().toLowerCase().replaceAll('_', ' ')] ?? 'unknown',
         origin: parseGeoCoordinate(activity.start),
         destination: parseGeoCoordinate(activity.end),
         observedPath: [],
@@ -192,8 +244,12 @@ export function parseTimelineRecords(
       return
     }
 
-    const pathResult = timelinePathSchema.safeParse(record)
-    if (pathResult.success) {
+    if ('timelinePath' in recordObject) {
+      const pathResult = timelinePathSchema.safeParse(record)
+      if (!pathResult.success) {
+        quarantined.push({ sourceIndex, reason: 'Timeline path is malformed.' })
+        return
+      }
       const start = parseTimestamp(pathResult.data.startTime)
       const end = parseTimestamp(pathResult.data.endTime)
       if (!start || !end) {
@@ -204,8 +260,12 @@ export function parseTimelineRecords(
       return
     }
 
-    const memoryResult = memorySchema.safeParse(record)
-    if (memoryResult.success) {
+    if ('timelineMemory' in recordObject) {
+      const memoryResult = memorySchema.safeParse(record)
+      if (!memoryResult.success) {
+        quarantined.push({ sourceIndex, reason: 'Timeline Memory is malformed.' })
+        return
+      }
       const start = parseTimestamp(memoryResult.data.startTime)
       const end = parseTimestamp(memoryResult.data.endTime)
       if (!start || !end) {
@@ -226,10 +286,22 @@ export function parseTimelineRecords(
     quarantined.push({ sourceIndex, reason: 'Unsupported or malformed Timeline record.' })
   })
 
+  legs.sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
+  const exactLegs = new Map<string, Leg[]>()
+  for (const leg of legs) {
+    const key = `${leg.start}|${leg.end}`
+    const matches = exactLegs.get(key) ?? []
+    matches.push(leg)
+    exactLegs.set(key, matches)
+  }
+
   for (const path of paths) {
-    const matchingLeg = legs.find((leg) => overlaps(leg.start, leg.end, path.start, path.end))
+    const exact = exactLegs.get(`${path.start}|${path.end}`)?.find((leg) => leg.observedPath.length === 0)
+    const matchingLeg = exact ?? findBestMatchingLeg(legs, path)
     if (matchingLeg) {
-      matchingLeg.observedPath = path.points
+      matchingLeg.observedPath = [...matchingLeg.observedPath, ...path.points]
+        .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
+        .filter((point, index, points) => index === 0 || coordinateKey(point, 6) !== coordinateKey(points[index - 1], 6))
       matchingLeg.sourceIds.push(path.sourceId)
       matchingLeg.origin ??= path.points[0]
       matchingLeg.destination ??= path.points.at(-1)
@@ -238,7 +310,7 @@ export function parseTimelineRecords(
         id: `leg-path-${path.sourceId}`,
         start: path.start,
         end: path.end,
-        mode: 'unknown',
+        mode: inferModeFromPath(path.points, path.start, path.end),
         origin: path.points[0],
         destination: path.points.at(-1),
         observedPath: path.points,
@@ -258,6 +330,7 @@ export function parseTimelineRecords(
   if (observedPointCount < Math.max(4, legs.length)) coverageWarnings.push('Some movement legs are sparse and will use explicit inferred geometry.')
 
   return {
+    schemaVersion: 2,
     id: `dataset-${Date.parse(importedAt).toString(36)}`,
     sourceName,
     importedAt,
@@ -290,4 +363,3 @@ export function parseTimelineText(text: string, sourceName?: string, importedAt?
   }
   return parseTimelineRecords(parsed, sourceName, importedAt)
 }
-

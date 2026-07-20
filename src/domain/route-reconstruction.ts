@@ -30,7 +30,7 @@ function fnv1a(input: string): string {
 
 export function routeFingerprint(leg: Leg): string {
   const normalized = [
-    'v2',
+    'v3',
     leg.mode,
     leg.origin ? `${leg.origin.lat.toFixed(5)},${leg.origin.lng.toFixed(5)}` : 'none',
     leg.destination ? `${leg.destination.lat.toFixed(5)},${leg.destination.lng.toFixed(5)}` : 'none',
@@ -89,16 +89,9 @@ export function greatCirclePoints(origin: Coordinate, destination: Coordinate, c
   })
 }
 
-function fallbackCurve(origin: Coordinate, destination: Coordinate, mode: TravelMode, count = 18): Coordinate[] {
+function fallbackCurve(origin: Coordinate, destination: Coordinate, mode: TravelMode, count = 12): Coordinate[] {
   if (mode === 'flight') return greatCirclePoints(origin, destination)
-  const distance = haversineKm(origin, destination)
-  const bend = Math.min(1.8, distance / 500) * (origin.lng < destination.lng ? 1 : -1)
-  return Array.from({ length: count }, (_, index) => {
-    const t = index / (count - 1)
-    const point = interpolateCoordinate(origin, destination, t)
-    const arc = Math.sin(Math.PI * t)
-    return { lat: point.lat + arc * bend * 0.45, lng: point.lng + arc * bend }
-  })
+  return Array.from({ length: count }, (_, index) => interpolateCoordinate(origin, destination, index / (count - 1)))
 }
 
 export function selectLocalGeometry(leg: Leg): RouteGeometry {

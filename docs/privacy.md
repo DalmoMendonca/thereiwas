@@ -1,50 +1,30 @@
 # Privacy and security
 
-## Local by default
+## Browser boundary
 
-The imported Timeline file never becomes an upload. The browser reads it, sends the text to a same-origin Web Worker, normalizes it, and stores the derived dataset in IndexedDB. The app has no account, analytics tracker, cloud database, or background sync.
+The browser reads the Timeline file, sends its text to a same-origin Web Worker, and stores the normalized result in IndexedDB. There is no account, analytics tracker, cloud database, or background sync.
 
-## External requests
+MapLibre requests OpenFreeMap vector tiles derived from OpenStreetMap for the visible map. When a browser-safe, URL-restricted Mapbox token is configured, Mapbox receives only the start and end coordinates of sparse driving, walking, or cycling legs selected for route enhancement.
 
-Mapbox receives only coordinates required for a selected significant routing or geocoding job, and only when a URL-restricted public browser token is configured. Flights and unsupported modes never become ground-routing requests.
+## GPT-5.6 boundary
 
-OpenAI receives one selected trip’s bounded Memory Dossier:
+OpenAI receives one selected trip's bounded dossier:
 
-- title and trip dates
-- duration, nights, and total distance
-- destination IDs, safe names, arrivals, departures, and durations
-- leg IDs, modes, dates, and distances
-- day-level movement and significant transitions
-- coverage gaps and uncertainty
-- notes and reflection answers the user explicitly supplied
+- title and dates
+- named cities, regions, and countries
+- arrivals, departures, and time spent
+- movement modes, dates, and summarized distances
+- day-level movement, coverage limits, and uncertainty
+- notes and reflection answers supplied by the user
 
-It does not receive the raw Timeline JSON, unrelated dates, home coordinates, complete path points, media, or provider keys. Home is represented as “Home.” The OpenAI request sets `store: false`.
-
-## Request inspector
-
-The interface shows provider, purpose, minimized payload size, time, and outcome. It never shows or logs secret values. The request preview explicitly reports zero raw path points.
+It does not receive the raw Timeline JSON, Home coordinates, raw coordinates, recorded path points, unrelated dates, media, or provider keys. The request uses `store: false`.
 
 ## Server controls
 
-The Netlify Function:
+The Netlify Function accepts JSON POSTs only, restricts origins, caps the body at 48 KB, validates the dossier before provider use, rate limits repeated calls per client window, keeps `OPENAI_API_KEY` server-side, validates the structured response, and returns a named-place local fallback when the provider is unavailable. It does not persist dossiers.
 
-- accepts JSON POSTs only
-- restricts CORS to production, Netlify previews, and local development
-- limits request bodies to 48 KB
-- validates the dossier before provider use
-- limits repeated calls per client window
-- keeps `OPENAI_API_KEY` server-side
-- validates and strips the structured response
-- returns sanitized errors or a deterministic fallback
-- does not persist or intentionally log dossiers
+Provider failures are logged only as sanitized error messages for diagnosis. Dossier contents and keys are not logged.
 
-Site headers restrict frame ancestors, content types, referrers, permissions, script/connect origins, and forms.
+## Deletion and repository controls
 
-## Local deletion
-
-**Delete my local data** clears normalized Timeline evidence, trip records, route cache, Memory Plans, story history, and last-view state from IndexedDB. Re-importing remains possible from the original file.
-
-## Public repository controls
-
-`.env`, raw Timeline filenames, databases, logs, and private media are ignored. The browser bundle uses only `VITE_MAPBOX_ACCESS_TOKEN`; `OPENAI_API_KEY` is never assigned a `VITE_` prefix. Staged diffs and secret scans are checked before push.
-
+The imported-data disclosure includes a destructive action that clears normalized evidence, trips, routes, stories, and view state from IndexedDB. `.env`, `.testing-data/`, known Timeline filenames, databases, logs, and private media are ignored. The production browser bundle must not contain `OPENAI_API_KEY` or any other server secret.

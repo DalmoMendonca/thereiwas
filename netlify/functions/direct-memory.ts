@@ -17,8 +17,25 @@ const dossierSchema = z.object({
     nightsAway: z.number().int().min(0).max(366),
     totalDistanceKm: z.number().min(0).max(500_000),
   }),
-  destinations: z.array(z.object({ id: z.string().max(120), name: z.string().max(160), firstArrival: z.string().max(50), lastDeparture: z.string().max(50), durationMinutes: z.number().min(0).max(1_000_000) })).max(80),
-  legs: z.array(z.object({ id: z.string().max(120), start: z.string().max(50), end: z.string().max(50), mode: z.enum(['driving', 'walking', 'cycling', 'running', 'flight', 'train', 'subway', 'tram', 'bus', 'ferry', 'skiing', 'unknown']), distanceKm: z.number().min(0).max(100_000) })).max(200),
+  destinations: z.array(z.object({
+    id: z.string().max(120),
+    name: z.string().max(160),
+    locality: z.string().max(160).optional(),
+    region: z.string().max(160).optional(),
+    country: z.string().max(160).optional(),
+    firstArrival: z.string().max(50),
+    lastDeparture: z.string().max(50),
+    durationMinutes: z.number().min(0).max(1_000_000),
+  })).max(80),
+  legs: z.array(z.object({
+    id: z.string().max(120),
+    start: z.string().max(50),
+    end: z.string().max(50),
+    mode: z.enum(['driving', 'walking', 'cycling', 'running', 'flight', 'train', 'subway', 'tram', 'bus', 'ferry', 'skiing', 'unknown']),
+    distanceKm: z.number().min(0).max(100_000),
+    from: z.string().max(160).optional(),
+    to: z.string().max(160).optional(),
+  })).max(200),
   days: z.array(z.object({ date: z.string().max(20), destinationIds: z.array(z.string().max(120)).max(40), movementKm: z.number().min(0).max(100_000), notableTransitions: z.array(z.string().max(120)).max(20) })).max(366),
   coverage: z.object({ score: z.number().min(0).max(1), gaps: z.array(z.string().max(320)).max(30) }),
   uncertainties: z.array(z.string().max(320)).max(40),
@@ -68,6 +85,8 @@ Rules:
 - Label inferences with certainty "inferred" and use them sparingly.
 - Treat reflection answers as user-supplied evidence and ground them to IDs prefixed "reflection:".
 - Use restrained, specific prose. Avoid travel-blog language, uplift cliches, and generic sentiment.
+- Use the supplied city, region, and country names. Never write "unnamed stop" or expose coordinates as prose.
+- Prefer arrivals, departures, changes in travel mode, and time spent in named places. Distance is supporting evidence, not the story.
 - Preserve every meaningful uncertainty. If evidence is weak, say so.
 - Every factual highlight and caption needs grounding IDs copied from destination or leg IDs in the dossier.
 - Reflection questions must ask for human meaning the telemetry cannot know.
@@ -104,22 +123,22 @@ export const handler: Handler = async (event) => {
   if (!apiKey) return response(200, { plan: fallback, source: 'deterministic-fallback', model: null }, origin)
 
   try {
-    // Netlify's synchronous function ceiling is 30 seconds. Keep enough room to
-    // validate and return the deterministic plan if the model is slow.
-    const client = new OpenAI({ apiKey, timeout: 24_000, maxRetries: 0 })
+    // Keep enough room to validate and return the deterministic plan if the model is slow.
+    const client = new OpenAI({ apiKey, timeout: 27_000, maxRetries: 0 })
     const result = await client.responses.parse({
       model: process.env.OPENAI_MODEL || 'gpt-5.6',
       store: false,
-      reasoning: { effort: 'low' },
+      reasoning: { effort: 'none' },
       instructions,
       input: JSON.stringify(dossier),
-      text: { format: zodTextFormat(memoryPlanSchema, 'memory_plan') },
-      max_output_tokens: 2500,
+      text: { format: zodTextFormat(memoryPlanSchema, 'memory_plan'), verbosity: 'low' },
+      max_output_tokens: 1600,
     })
     const parsed = result.output_parsed
     if (!parsed) throw new Error('Structured response was empty.')
     return response(200, { plan: memoryPlanSchema.parse(parsed), source: 'openai', model: process.env.OPENAI_MODEL || 'gpt-5.6' }, origin)
-  } catch {
+  } catch (error) {
+    console.error('OpenAI Memory Director request failed.', error instanceof Error ? error.message : 'Unknown error')
     return response(200, { plan: fallback, source: 'deterministic-fallback', model: null, notice: 'The live direction was unavailable, so a grounded local structure was used.' }, origin)
   }
 }

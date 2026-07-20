@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { feature } from 'topojson-client'
-import world from 'world-atlas/countries-110m.json'
+import {
+  AttributionControl,
+  LngLatBounds,
+  Map as MapLibreMap,
+  NavigationControl,
+  type GeoJSONSource,
+} from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
 import { haversineKm } from '../../domain/geo'
 import { buildCinematicKeyframes, buildPlaybackTimeline, interpolatePlayback, mapCinematicProgress } from '../../domain/playback'
 import type { RouteGeometry } from '../../domain/route-reconstruction'
+import { tripDistanceKm } from '../../domain/trip-detection'
 import type { NormalizedTimeline, TravelMode, TripRecord } from '../../domain/types'
 import { Icon } from '../../components/Icon'
 
@@ -14,125 +21,205 @@ interface CinematicMapProps {
   loading?: boolean
 }
 
-interface ProjectedPoint { x: number; y: number }
+const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron'
 
-const WIDTH = 1000
-const HEIGHT = 500
-
-function project({ lat, lng }: { lat: number; lng: number }): ProjectedPoint {
-  return { x: ((lng + 180) / 360) * WIDTH, y: ((90 - lat) / 180) * HEIGHT }
+function lineFeature(points: Array<{ lat: number; lng: number }>, properties: Record<string, string> = {}) {
+  return {
+    type: 'Feature' as const,
+    properties,
+    geometry: { type: 'LineString' as const, coordinates: points.map((point) => [point.lng, point.lat]) },
+  }
 }
 
-function geometryPath(geometry: unknown): string {
-  if (!geometry || typeof geometry !== 'object') return ''
-  const typed = geometry as { type?: string; coordinates?: unknown }
-  const polygon = (rings: unknown) =>
-    (rings as Array<Array<[number, number]>>)
-      .map((ring) => ring.map(([lng, lat], index) => `${index ? 'L' : 'M'}${project({ lat, lng }).x.toFixed(2)},${project({ lat, lng }).y.toFixed(2)}`).join(' ') + ' Z')
-      .join(' ')
-  if (typed.type === 'Polygon') return polygon(typed.coordinates)
-  if (typed.type === 'MultiPolygon') return (typed.coordinates as unknown[]).map(polygon).join(' ')
-  return ''
+function fullRouteData(routes: RouteGeometry[]) {
+  return {
+    type: 'FeatureCollection' as const,
+    features: routes.filter((route) => route.points.length > 1).map((route) => lineFeature(route.points, { provenance: route.provenance })),
+  }
+}
+
+function progressData(points: Array<{ lat: number; lng: number }>) {
+  return {
+    type: 'FeatureCollection' as const,
+    features: points.length > 1 ? [lineFeature(points)] : [],
+  }
+}
+
+function markerData(point?: { lat: number; lng: number }) {
+  return {
+    type: 'FeatureCollection' as const,
+    features: point ? [{ type: 'Feature' as const, properties: {}, geometry: { type: 'Point' as const, coordinates: [point.lng, point.lat] } }] : [],
+  }
 }
 
 function modeLabel(mode: TravelMode): string {
-  return mode === 'flight' ? 'In flight' : mode === 'driving' ? 'On the road' : mode === 'walking' ? 'Walking' : mode.charAt(0).toUpperCase() + mode.slice(1)
-}
-
-function modeIcon(mode: TravelMode) {
-  return mode === 'flight' ? 'flight' : 'route'
+  const labels: Record<TravelMode, string> = {
+    driving: 'Driving',
+    walking: 'Walking',
+    cycling: 'Cycling',
+    running: 'Running',
+    flight: 'Flying',
+    train: 'Train',
+    subway: 'Subway',
+    tram: 'Tram',
+    bus: 'Bus',
+    ferry: 'Ferry',
+    skiing: 'Skiing',
+    unknown: 'Moving',
+  }
+  return labels[mode]
 }
 
 export function CinematicMap({ routes, timeline, trip, loading }: CinematicMapProps) {
-  const [playing, setPlaying] = useState(false)
-  const [speed, setSpeed] = useState<1 | 2 | 5 | 10>(1)
-  const [cinematic, setCinematic] = useState(true)
-  const [finished, setFinished] = useState(false)
-  const progressValue = useRef(0)
-  const wallProgressValue = useRef(0)
-  const animationFrame = useRef<number>(0)
+  const container = useRef<HTMLDivElement>(null)
+  const map = useRef<MapLibreMap | null>(null)
+  const mapLoaded = useRef(false)
+  const animationFrame = useRef(0)
   const animationStartedAt = useRef(0)
   const animationStartProgress = useRef(0)
-  const routePath = useRef<SVGPathElement>(null)
-  const marker = useRef<SVGGElement>(null)
-  const camera = useRef<SVGGElement>(null)
+  const progressValue = useRef(0)
+  const lastMapUpdate = useRef(0)
   const progressInput = useRef<HTMLInputElement>(null)
   const dateText = useRef<HTMLSpanElement>(null)
   const timeText = useRef<HTMLSpanElement>(null)
-  const distanceText = useRef<HTMLSpanElement>(null)
   const modeText = useRef<HTMLSpanElement>(null)
   const placeText = useRef<HTMLSpanElement>(null)
-  const modeGlyph = useRef<HTMLSpanElement>(null)
-  const reducedMotion = useRef(false)
+  const [playing, setPlaying] = useState(false)
 
   const playback = useMemo(() => buildPlaybackTimeline(routes), [routes])
-  const cinematicKeyframes = useMemo(() => buildCinematicKeyframes(routes, playback), [routes, playback])
-  const landPath = useMemo(() => {
-    const collection = feature(world as never, (world as { objects: { countries: unknown } }).objects.countries as never) as unknown as { features: Array<{ geometry: unknown }> }
-    return collection.features.map((item) => geometryPath(item.geometry)).join(' ')
-  }, [])
-  const tripVisits = useMemo(() => timeline.visits.filter((visit) => trip.visitIds.includes(visit.id) && visit.coordinate && visit.displayName !== 'Home'), [timeline, trip])
-  const routeD = useMemo(
-    () =>
-      routes
-        .map((route) => route.points.map((point, index) => {
-          const position = project(point)
-          return `${index ? 'L' : 'M'}${position.x.toFixed(2)},${position.y.toFixed(2)}`
-        }).join(' '))
-        .join(' '),
-    [routes],
-  )
+  const keyframes = useMemo(() => buildCinematicKeyframes(routes, playback), [routes, playback])
+  const completeRoute = useMemo(() => fullRouteData(routes), [routes])
+  const miles = Math.round(tripDistanceKm(timeline, trip) * 0.621371)
+  const modeLabels = [...new Set(routes.filter((route) => route.mode !== 'unknown').map((route) => route.mode))]
+    .map((mode) => ({ mode, count: routes.filter((route) => route.mode === mode).length }))
+    .sort((a, b) => b.count - a.count)
+    .map(({ mode }) => modeLabel(mode))
+  const travelModes = modeLabels.length > 2 ? `${modeLabels.slice(0, 2).join(', ')} +${modeLabels.length - 2}` : modeLabels.join(', ') || 'Recorded movement'
 
-  const updateVisuals = useCallback(
-    (progress: number) => {
-      const state = interpolatePlayback(playback, progress)
-      if (!state) return
-      progressValue.current = progress
-      if (progressInput.current) progressInput.current.value = String(progress)
-      if (routePath.current) routePath.current.style.strokeDashoffset = String(1 - progress)
-      const point = project(state)
-      if (marker.current) marker.current.setAttribute('transform', `translate(${point.x} ${point.y})`)
-      const zoom = reducedMotion.current ? 1 : state.mode === 'flight' ? 1.15 : state.mode === 'driving' ? 3.05 : 4.1
-      if (camera.current) camera.current.setAttribute('transform', `translate(${WIDTH / 2} ${HEIGHT / 2}) scale(${zoom}) translate(${-point.x} ${-point.y})`)
-      const localClock = new Date(Date.parse(state.timestamp) + state.utcOffsetMinutes * 60_000)
-      const date = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(localClock)
-      const time = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' }).format(localClock)
-      if (dateText.current) dateText.current.textContent = date
-      if (timeText.current) timeText.current.textContent = time
-      if (distanceText.current) distanceText.current.textContent = `${Math.round(state.distanceKm).toLocaleString()} km`
-      if (modeText.current) modeText.current.textContent = modeLabel(state.mode)
-      if (modeGlyph.current) modeGlyph.current.dataset.mode = modeIcon(state.mode)
-      const nearest = tripVisits
-        .map((visit) => ({ visit, distance: haversineKm(state, visit.coordinate!) }))
-        .sort((a, b) => a.distance - b.distance)[0]
-      if (placeText.current) placeText.current.textContent = nearest && nearest.distance < 65 ? nearest.visit.displayName ?? 'On the way' : state.mode === 'flight' ? 'Across the Atlantic' : 'On the way'
-    },
-    [playback, tripVisits],
-  )
+  const fitRoute = useCallback(() => {
+    const activeMap = map.current
+    const points = routes.flatMap((route) => route.points)
+    if (!activeMap || !mapLoaded.current || !points.length) return
+    const bounds = new LngLatBounds()
+    for (const point of points) bounds.extend([point.lng, point.lat])
+    activeMap.fitBounds(bounds, { padding: 48, maxZoom: 12, duration: 0 })
+  }, [routes])
 
   useEffect(() => {
-    reducedMotion.current = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (!container.current || map.current) return
+    const activeMap = new MapLibreMap({
+      container: container.current,
+      style: MAP_STYLE,
+      center: [0, 20],
+      zoom: 1,
+      attributionControl: false,
+      maxPitch: 0,
+      dragRotate: false,
+      pitchWithRotate: false,
+    })
+    map.current = activeMap
+    activeMap.addControl(new NavigationControl({ showCompass: false }), 'top-right')
+    activeMap.addControl(new AttributionControl({
+      compact: true,
+      customAttribution: '<a href="https://www.geonames.org/" target="_blank" rel="noreferrer">Place names © GeoNames</a>',
+    }))
+    activeMap.on('load', () => {
+      mapLoaded.current = true
+      activeMap.addSource('route-full', { type: 'geojson', data: completeRoute })
+      activeMap.addSource('route-progress', { type: 'geojson', data: progressData([]) })
+      activeMap.addSource('route-marker', { type: 'geojson', data: markerData(playback.points[0]) })
+      activeMap.addLayer({
+        id: 'route-fallback',
+        type: 'line',
+        source: 'route-full',
+        filter: ['in', ['get', 'provenance'], ['literal', ['fallback', 'great-circle']]],
+        paint: { 'line-color': '#4b5563', 'line-width': 3, 'line-opacity': 0.66, 'line-dasharray': [2, 2] },
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+      })
+      activeMap.addLayer({
+        id: 'route-recorded',
+        type: 'line',
+        source: 'route-full',
+        filter: ['!', ['in', ['get', 'provenance'], ['literal', ['fallback', 'great-circle']]]],
+        paint: { 'line-color': '#27313a', 'line-width': 3, 'line-opacity': 0.72 },
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+      })
+      activeMap.addLayer({
+        id: 'route-progress-line',
+        type: 'line',
+        source: 'route-progress',
+        paint: { 'line-color': '#0d6b4d', 'line-width': 5, 'line-opacity': 0.95 },
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+      })
+      activeMap.addLayer({
+        id: 'route-marker-dot',
+        type: 'circle',
+        source: 'route-marker',
+        paint: {
+          'circle-radius': 7,
+          'circle-color': '#d64b2a',
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 3,
+        },
+      })
+      fitRoute()
+    })
+    return () => {
+      cancelAnimationFrame(animationFrame.current)
+      activeMap.remove()
+      map.current = null
+      mapLoaded.current = false
+    }
+  }, [completeRoute, fitRoute, playback.points])
+
+  useEffect(() => {
+    const activeMap = map.current
+    if (!activeMap || !mapLoaded.current) return
+    ;(activeMap.getSource('route-full') as GeoJSONSource | undefined)?.setData(completeRoute)
+    ;(activeMap.getSource('route-progress') as GeoJSONSource | undefined)?.setData(progressData([]))
+    ;(activeMap.getSource('route-marker') as GeoJSONSource | undefined)?.setData(markerData(playback.points[0]))
+    progressValue.current = 0
+    if (progressInput.current) progressInput.current.value = '0'
+    fitRoute()
+  }, [completeRoute, fitRoute, playback.points])
+
+  const updateVisuals = useCallback((progress: number, now = performance.now()) => {
+    const state = interpolatePlayback(playback, progress)
+    if (!state) return
+    progressValue.current = progress
+    if (progressInput.current) progressInput.current.value = String(progress)
+    const localClock = new Date(Date.parse(state.timestamp) + state.utcOffsetMinutes * 60_000)
+    if (dateText.current) dateText.current.textContent = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(localClock)
+    if (timeText.current) timeText.current.textContent = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' }).format(localClock)
+    if (modeText.current) modeText.current.textContent = modeLabel(state.mode)
+    const nearest = trip.destinations
+      .map((destination) => ({ destination, distance: haversineKm(state, destination.coordinate) }))
+      .sort((a, b) => a.distance - b.distance)[0]
+    if (placeText.current) placeText.current.textContent = nearest && nearest.distance < 75 ? nearest.destination.name : modeLabel(state.mode)
+
+    if (mapLoaded.current && now - lastMapUpdate.current >= 40) {
+      lastMapUpdate.current = now
+      const progressed = [...playback.points.slice(0, state.pointIndex + 1), state]
+      ;(map.current?.getSource('route-progress') as GeoJSONSource | undefined)?.setData(progressData(progressed))
+      ;(map.current?.getSource('route-marker') as GeoJSONSource | undefined)?.setData(markerData(state))
+    }
+  }, [playback, trip.destinations])
+
+  useEffect(() => {
     updateVisuals(0)
     return () => cancelAnimationFrame(animationFrame.current)
   }, [updateVisuals])
 
-  const tick = useCallback(
-    (now: number) => {
-      const duration = cinematic ? 30_000 : 120_000 / speed
-      const elapsed = now - animationStartedAt.current
-      const wallProgress = Math.min(1, animationStartProgress.current + elapsed / duration)
-      wallProgressValue.current = wallProgress
-      const progress = cinematic ? mapCinematicProgress(cinematicKeyframes, wallProgress) : wallProgress
-      updateVisuals(progress)
-      if (wallProgress >= 1) {
-        setPlaying(false)
-        setFinished(true)
-        return
-      }
-      animationFrame.current = requestAnimationFrame(tick)
-    },
-    [cinematic, cinematicKeyframes, speed, updateVisuals],
-  )
+  const tick = useCallback((now: number) => {
+    const elapsed = now - animationStartedAt.current
+    const wallProgress = Math.min(1, animationStartProgress.current + elapsed / 30_000)
+    updateVisuals(mapCinematicProgress(keyframes, wallProgress), now)
+    if (wallProgress >= 1) {
+      setPlaying(false)
+      return
+    }
+    animationFrame.current = requestAnimationFrame(tick)
+  }, [keyframes, updateVisuals])
 
   const togglePlayback = useCallback(() => {
     if (playing) {
@@ -140,17 +227,18 @@ export function CinematicMap({ routes, timeline, trip, loading }: CinematicMapPr
       setPlaying(false)
       return
     }
-    if (progressValue.current >= 1) {
-      progressValue.current = 0
-      wallProgressValue.current = 0
-      setFinished(false)
-      updateVisuals(0)
-    }
-    animationStartProgress.current = cinematic ? wallProgressValue.current : progressValue.current
+    if (progressValue.current >= 0.999) updateVisuals(0)
+    animationStartProgress.current = progressValue.current >= 0.999 ? 0 : progressValue.current
     animationStartedAt.current = performance.now()
     setPlaying(true)
     animationFrame.current = requestAnimationFrame(tick)
   }, [playing, tick, updateVisuals])
+
+  const scrub = (value: number) => {
+    cancelAnimationFrame(animationFrame.current)
+    setPlaying(false)
+    updateVisuals(value)
+  }
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -159,120 +247,49 @@ export function CinematicMap({ routes, timeline, trip, loading }: CinematicMapPr
         event.preventDefault()
         togglePlayback()
       }
-      if (event.code === 'ArrowLeft' || event.code === 'ArrowRight') {
-        event.preventDefault()
-        const direction = event.code === 'ArrowRight' ? 1 : -1
-        const next = Math.max(0, Math.min(1, progressValue.current + direction * 0.025))
-        cancelAnimationFrame(animationFrame.current)
-        setPlaying(false)
-        updateVisuals(next)
-      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [togglePlayback, updateVisuals])
-
-  const onScrub = (value: number) => {
-    cancelAnimationFrame(animationFrame.current)
-    setPlaying(false)
-    setFinished(value >= 1)
-    wallProgressValue.current = value
-    updateVisuals(value)
-  }
-
-  const setPlaybackSpeed = (value: 1 | 2 | 5 | 10) => {
-    setCinematic(false)
-    setSpeed(value)
-    if (playing) {
-      cancelAnimationFrame(animationFrame.current)
-      animationStartProgress.current = cinematic ? wallProgressValue.current : progressValue.current
-      animationStartedAt.current = performance.now()
-      animationFrame.current = requestAnimationFrame(tick)
-    }
-  }
-
-  const provenance = [...new Set(routes.map((route) => route.provenance))]
+  }, [togglePlayback])
 
   return (
-    <section className="cinematic-map" aria-label="Cinematic trip replay">
+    <section className="trip-replay" aria-label={`Replay ${trip.title}`}>
       <div className="map-stage">
-        <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={`Animated route for ${trip.title}`}>
-          <rect width={WIDTH} height={HEIGHT} className="map-ocean" />
-          <g ref={camera} className="map-camera">
-            <path d={landPath} className="map-land" />
-            <path d={routeD} className="route-shadow" pathLength="1" />
-            <path ref={routePath} d={routeD} className="route-progress" pathLength="1" />
-            {tripVisits.map((visit) => {
-              const location = project(visit.coordinate!)
-              return (
-                <g key={visit.id} transform={`translate(${location.x} ${location.y})`} className="map-stop">
-                  <circle r="3.2" />
-                  <text x="6" y="-5">{visit.displayName}</text>
-                </g>
-              )
-            })}
-            <g ref={marker} className="map-marker">
-              <circle r="8" className="marker-halo" />
-              <circle r="3.8" className="marker-core" />
-            </g>
-          </g>
-        </svg>
-
-        {loading && (
-          <div className="map-loading" role="status">
-            <span className="loading-line" />
-            Reconstructing the route…
-          </div>
-        )}
-
-        <div className="map-hud map-hud-top" aria-live="polite">
-          <div className="hud-place"><span ref={placeText}>At the origin</span><small ref={modeText}>Ready</small></div>
-          <div className="hud-clock"><span ref={dateText}>Jul 3</span><strong ref={timeText}>6:40 AM</strong></div>
+        <div ref={container} className="map-canvas" aria-label={`Map of ${trip.title}`} />
+        {loading && <div className="map-loading" role="status">Preparing the route…</div>}
+        <div className="map-now" aria-live="polite">
+          <strong ref={placeText}>{trip.destinations[0]?.name ?? trip.title}</strong>
+          <span><span ref={dateText} /> <span ref={timeText} /> · <span ref={modeText}>Ready</span></span>
         </div>
-
-        <div className="map-hud map-hud-distance">
-          <span ref={modeGlyph} className="hud-mode-icon" data-mode="route"><Icon name="route" /></span>
-          <strong ref={distanceText}>0 km</strong>
-          <small>traveled</small>
-        </div>
-
-        {finished && (
-          <div className="journey-finale" role="status">
-            <span>The route closes</span>
-            <strong>{Math.round(playback.totalDistanceKm).toLocaleString()} km</strong>
-            <small>{trip.evidence.nightsAway} nights · {trip.evidence.destinationCount} destinations</small>
-          </div>
-        )}
-
-        <div className="map-provenance" title="Source geometry is preserved separately from enhanced or inferred route geometry">
-          {provenance.includes('enhanced') ? 'Enhanced + source route' : provenance.includes('observed') ? 'Observed + inferred route' : 'Honest inferred route'}
-        </div>
+        <button className="fit-route" type="button" onClick={fitRoute}>Fit route</button>
       </div>
 
-      <div className="playback-controls">
-        <button className="play-button" onClick={togglePlayback} disabled={!playback.points.length} aria-label={playing ? 'Pause replay' : finished ? 'Replay journey' : 'Play journey'}>
-          <Icon name={playing ? 'pause' : 'play'} />
-          <span>{playing ? 'Pause' : finished ? 'Replay' : 'Play'}</span>
-        </button>
-        <input
-          ref={progressInput}
-          className="scrubber"
-          type="range"
-          min="0"
-          max="1"
-          step="0.001"
-          defaultValue="0"
-          onChange={(event) => onScrub(Number(event.target.value))}
-          aria-label="Replay position"
-        />
-        <div className="speed-controls" aria-label="Playback speed">
-          <button className={cinematic ? 'active' : ''} onClick={() => setCinematic(true)}>30 sec</button>
-          {([1, 2, 5, 10] as const).map((value) => (
-            <button key={value} className={!cinematic && speed === value ? 'active' : ''} onClick={() => setPlaybackSpeed(value)}>{value}×</button>
-          ))}
+      <aside className="replay-panel">
+        <div className="trip-stats" aria-label="Trip statistics">
+          <div><span>Distance</span><strong>{miles.toLocaleString()} mi</strong></div>
+          <div><span>Nights</span><strong>{trip.evidence.nightsAway}</strong></div>
+          <div><span>Places</span><strong>{trip.destinations.length}</strong></div>
+          <div><span>Travel</span><strong>{travelModes}</strong></div>
         </div>
-        <span className="keyboard-hint"><kbd>Space</kbd> play · <kbd>←</kbd><kbd>→</kbd> scrub</span>
-      </div>
+        <div className="replay-controls">
+          <button className="play-button" onClick={togglePlayback} disabled={!playback.points.length} aria-label={playing ? 'Pause replay' : progressValue.current >= 0.999 ? 'Replay trip' : 'Play trip'}>
+            <Icon name={playing ? 'pause' : 'play'} />
+            {playing ? 'Pause' : progressValue.current >= 0.999 ? 'Replay' : 'Play'}
+          </button>
+          <input
+            ref={progressInput}
+            className="scrubber"
+            type="range"
+            min="0"
+            max="1"
+            step="0.001"
+            defaultValue="0"
+            onChange={(event) => scrub(Number(event.target.value))}
+            aria-label="Replay position"
+          />
+          <span>30 seconds</span>
+        </div>
+      </aside>
     </section>
   )
 }

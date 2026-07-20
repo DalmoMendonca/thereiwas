@@ -1,78 +1,61 @@
 # Architecture
 
-## Boundaries
-
-There I Was is a static React/Vite application with one server-side Netlify Function. Domain algorithms are pure TypeScript and do not live in React components.
+There I Was is a React/Vite browser application with one Netlify Function. Parsing, place naming, trip detection, route reconstruction, playback, and dossier construction are plain TypeScript domain modules.
 
 ```text
-Browser
-  Timeline file
-    -> Web Worker parser
-    -> normalized evidence
-    -> home and trip inference
-    -> route selection
-    -> playback timeline
-    -> IndexedDB
+Timeline JSON
+  -> Web Worker parser
+  -> normalized visits, movement, paths, and Timeline Memories
+  -> offline place naming
+  -> semantic Home returns
+  -> unique trip records
+  -> route reconstruction
+  -> MapLibre playback
+  -> IndexedDB
 
-  selected trip only
-    -> coordinate-free Memory Dossier
-    -> POST /.netlify/functions/direct-memory
-
-Netlify Function
-  origin, type, size, rate, and Zod validation
-    -> OpenAI Responses API (store: false)
-    -> Zod Memory Plan validation
-    -> sanitized result or deterministic fallback
+selected trip
+  -> coordinate-free dossier
+  -> Netlify Function validation
+  -> OpenAI Responses API, store: false
+  -> strict Memory Plan validation
+  -> editable story
 ```
 
-## Import pipeline
+## Import
 
-The worker receives text and a source name. It parses a top-level array, validates supported records independently, preserves source indexes, normalizes numeric strings and `geo:` coordinates, reconstructs path timestamps from minute offsets, removes consecutive duplicate points, attaches observed paths to overlapping movement legs, and globally sorts normalized evidence. Unsupported records are quarantined rather than failing the import.
+The worker parses the top-level array once and identifies each record by shape before validating it. It normalizes numeric strings and timestamps, reconstructs recorded paths from their minute offsets, removes repeated coordinates, and attaches paths to movement legs with an indexed time lookup. Unmatched paths become their own observed movement legs.
 
-Stages emitted to the UI are Reading, Parsing, Normalizing, Reconstructing paths, Detecting home, Detecting trips, Preparing routes, and Saving.
+Current Timeline exports can emit two hierarchy records for the same visit interval. Exact intervals are grouped and the semantic Home, Work, or most specific usable record wins. Source IDs are retained for traceability.
 
-## Trip inference
+## Place naming
 
-Home uses an explicit `semanticType: Home` when available. The fallback scores clustered overnight visits by recurrence, duration, and date span.
+`public/data/cities.json` is generated from the GeoNames `cities15000`, country, and first-level administrative datasets. The worker resolves each visit to a nearby city using one-degree spatial buckets and a bounded nearest-neighbor search. The result includes locality, region, country, and country code. Neighborhood, historic, abandoned, and destroyed-place feature classes are excluded so trip labels stay legible.
 
-Away visits at least 40 km from home are grouped by their furthest covered timestamp so nested visits cannot split an episode. A candidate needs a sustained stay, flight, or Timeline Memory. Boundaries expand to a home-region departure and return. A long, unreturned dominant cluster triggers the practical relocation guard. Every candidate exposes distance, nights, destinations, modes, Memory support, coverage, and plain-language reasons.
+The raw coordinate remains part of local route evidence. It is not used as user-facing prose or sent to GPT-5.6.
 
-User-created and edited boundaries are locked. Recomputing included evidence may change derived statistics, never the dates themselves.
+## Trip detection
 
-## Route reconstruction
+Semantic Home visits are sorted and merged into Home-presence intervals. A candidate journey is the gap between leaving one Home interval and entering the next. Short gaps are ignored unless a flight or Timeline Memory supports them. A seven-day move between distant Home locations and any gap longer than 180 days are treated as relocation or insufficient evidence rather than a vacation.
 
-Each route retains provenance:
+Destinations are grouped by named city and retained when the record shows at least four hours, an overnight stay, or repeated visits. Titles use the dominant foreign country, dominant region/state, or dominant city. Exact start/end ranges are deduplicated before display.
 
-- `observed`: Timeline source path
-- `enhanced`: Mapbox Directions for sparse driving, walking, or cycling only
-- `great-circle`: flights
-- `fallback`: explicit inferred curve/line for unsupported or unavailable modes
+## Routes and replay
 
-Unsupported modes are never silently routed as driving. A deterministic versioned fingerprint keys IndexedDB route cache. Provider errors degrade to local geometry. Returned vertices are timestamped by cumulative distance rather than vertex index.
+Every route segment retains provenance:
 
-## Playback
+- `observed`: points recorded in Timeline
+- `enhanced`: Mapbox Directions for a sparse driving, walking, or cycling leg when a token is configured
+- `great-circle`: a flight without a recorded path
+- `fallback`: a straight, visibly dashed connection when local evidence is incomplete
 
-The playback timeline stores coordinate arrays, timestamps, cumulative distances, route boundaries, and UTC offsets. Binary search finds the active interval. A single `requestAnimationFrame` clock directly updates SVG dash offset, marker transform, camera transform, slider, clock, distance, mode, and nearest place; the React tree does not rerender per frame.
+MapLibre renders those segments over OpenFreeMap vector tiles derived from OpenStreetMap, with visible attribution. The map fits the entire home-to-home route, remains static during playback, and keeps the complete route visible. A single animation clock advances the green progress line and orange current-position marker. React does not rerender on every frame.
 
-The 30-second mode maps wall time through cinematic keyframes. Flights, major ground movement, overnight pauses, arrivals, and the final reveal receive deliberate weight rather than inheriting raw trip duration. Reduced-motion mode removes camera choreography while keeping state changes and controls.
+## Story
 
-## Memory Director
+`buildMemoryDossier` includes only the selected trip's title, dates, named destinations, durations, summarized movement, modes, daily totals, coverage, uncertainty, and explicit user answers. It excludes coordinates, recorded path points, Home coordinates, unrelated dates, and source records.
 
-`buildMemoryDossier` creates a coordinate-free selected-trip summary. The function accepts at most 48 KB, validates it with Zod, restricts origins, rate limits by client IP, and calls `openai.responses.parse` with a Zod `text.format`. `store: false` is set.
-
-The returned plan is validated again. Highlights and captions require grounding IDs and certainty. Provider failure returns a deterministic grounded plan; the sample ships with a separately validated cached plan.
+The Netlify Function limits the body to 48 KB, validates it with Zod, applies origin and rate controls, and calls `openai.responses.parse` using GPT-5.6, Zod `text.format`, low reasoning effort, and `store: false`. The structured plan is validated again. A deterministic named-place plan remains available when the provider times out, refuses, or returns an invalid result.
 
 ## Persistence
 
-IndexedDB stores one current normalized session, trip records, dismissed candidates, last view, up to five prior Memory Plan versions per trip, and route cache entries. **Delete my local data** clears every store. No Timeline content is persisted on the server.
-
-## Failure behavior
-
-- Invalid JSON: human-readable import error
-- Partially malformed Timeline: valid records continue; warnings are reported
-- No home evidence: automatic and manual inference pauses honestly
-- Sparse route: explicit inferred geometry
-- Provider failure: no mode substitution; visible fallback
-- OpenAI timeout/refusal/schema failure: cached or deterministic grounded plan
-- Stale route cache shape: versioned fingerprint and defensive offset defaults
-
+IndexedDB stores the normalized session, trip records, dismissed trips, selected view, route cache, and up to five prior story drafts. Schema version changes invalidate incompatible derived data rather than trying to display stale shapes. Deleting imported data clears every store.

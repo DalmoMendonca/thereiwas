@@ -36,7 +36,13 @@ export async function saveSession(session: Omit<StoredSession, 'id' | 'updatedAt
 }
 
 export async function loadSession(): Promise<StoredSession | undefined> {
-  return (await database()).get('session', 'current')
+  const db = await database()
+  const session = await db.get('session', 'current')
+  if (session && session.timeline.schemaVersion !== 2) {
+    await Promise.all([db.clear('session'), db.clear('memories'), db.clear('routes')])
+    return undefined
+  }
+  return session
 }
 
 export async function saveMemoryPlan(tripId: string, plan: MemoryPlan, previous?: MemoryPlan): Promise<void> {

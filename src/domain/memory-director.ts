@@ -55,25 +55,37 @@ export function buildMemoryDossier(
 ): MemoryDossier {
   const visits = timeline.visits.filter((visit) => trip.visitIds.includes(visit.id) && visit.semanticType?.toLowerCase() !== 'home')
   const legs = timeline.legs.filter((leg) => trip.legIds.includes(leg.id))
-  const destinations = trip.destinationIds.map((id) => {
-    const related = visits.filter((visit) => (visit.placeId ?? visit.id) === id)
-    const place = timeline.places[id]
-    const first = related[0]
-    const last = related.at(-1)
-    return {
-      id,
-      name: place?.displayName ?? first?.displayName ?? 'Unnamed stop',
-      firstArrival: first?.start ?? trip.start,
-      lastDeparture: last?.end ?? trip.end,
-      durationMinutes: related.reduce((sum, visit) => sum + Math.max(0, Math.round((Date.parse(visit.end) - Date.parse(visit.start)) / 60_000)), 0),
-    }
-  })
+  const destinations = trip.destinations.map((destination) => ({
+    id: destination.id,
+    name: destination.name,
+    locality: destination.locality,
+    region: destination.region,
+    country: destination.country,
+    firstArrival: destination.firstArrival,
+    lastDeparture: destination.lastDeparture,
+    durationMinutes: destination.durationMinutes,
+  }))
+  const destinationByVisitId = new Map(trip.destinations.flatMap((destination) => destination.visitIds.map((visitId) => [visitId, destination.id] as const)))
+  const lowConfidencePlaceNames = [...new Set(
+    visits
+      .filter((visit) => (visit.confidence ?? 1) < 0.6)
+      .map((visit) => visit.displayName ?? 'A stop'),
+  )].slice(0, 10)
+
+  const nearestDestination = (coordinate?: { lat: number; lng: number }) => {
+    if (!coordinate || !trip.destinations.length) return undefined
+    const nearest = trip.destinations
+      .map((destination) => ({ destination, distance: haversineKm(coordinate, destination.coordinate) }))
+      .sort((a, b) => a.distance - b.distance)[0]
+    return nearest && nearest.distance <= 100 ? nearest.destination.name : undefined
+  }
 
   const days = new Map<string, MemoryDossier['days'][number]>()
   for (const visit of visits) {
     const date = dayKey(visit.start)
     const entry = days.get(date) ?? { date, destinationIds: [], movementKm: 0, notableTransitions: [] }
-    entry.destinationIds.push(visit.placeId ?? visit.id)
+    const destinationId = destinationByVisitId.get(visit.id)
+    if (destinationId) entry.destinationIds.push(destinationId)
     days.set(date, entry)
   }
   for (const leg of legs) {
@@ -84,6 +96,19 @@ export function buildMemoryDossier(
     days.set(date, entry)
   }
 
+  const topMovementIds = new Set(
+    [...legs]
+      .sort((a, b) => legDistanceKm(timeline, b.id) - legDistanceKm(timeline, a.id))
+      .slice(0, 30)
+      .map((leg) => leg.id),
+  )
+  const notableModes = new Set(['flight', 'train', 'subway', 'tram', 'bus', 'ferry'])
+  const dossierLegs = legs.filter((leg, index) =>
+    index === 0
+    || index === legs.length - 1
+    || topMovementIds.has(leg.id)
+    || notableModes.has(leg.mode),
+  ).slice(0, 60)
   const totalDistanceKm = legs.reduce((sum, leg) => sum + legDistanceKm(timeline, leg.id), 0)
   return {
     trip: {
@@ -95,12 +120,14 @@ export function buildMemoryDossier(
       totalDistanceKm: Math.round(totalDistanceKm),
     },
     destinations,
-    legs: legs.map((leg) => ({
+    legs: dossierLegs.map((leg) => ({
       id: leg.id,
       start: leg.start,
       end: leg.end,
       mode: leg.mode,
       distanceKm: Math.round(legDistanceKm(timeline, leg.id) * 10) / 10,
+      from: nearestDestination(leg.origin),
+      to: nearestDestination(leg.destination),
     })),
     days: [...days.values()].map((day) => ({
       ...day,
@@ -109,8 +136,8 @@ export function buildMemoryDossier(
     })),
     coverage: { score: trip.evidence.coverageScore, gaps: timeline.report.coverageWarnings },
     uncertainties: [
-      ...timeline.quarantined.map((record) => `Source record ${record.sourceIndex} was not usable.`),
-      ...visits.filter((visit) => (visit.confidence ?? 1) < 0.6).map((visit) => `${visit.displayName ?? 'A stop'} has low-confidence visit evidence.`),
+      ...(timeline.quarantined.length ? [`${timeline.quarantined.length} imported records could not be used.`] : []),
+      ...lowConfidencePlaceNames.map((name) => `${name} has low-confidence visit evidence.`),
     ],
     userNotes: userNotes.filter(Boolean).slice(0, 20),
     reflectionAnswers: reflectionAnswers.filter((item) => item.answer.trim()).slice(0, 10),
@@ -144,14 +171,27 @@ export function createDeterministicMemoryPlan(dossier: MemoryDossier): MemoryPla
   const last = dossier.destinations.at(-1)
   const longestLeg = [...dossier.legs].sort((a, b) => b.distanceKm - a.distanceKm)[0]
   const latestAnswer = dossier.reflectionAnswers.at(-1)
-  const middleStart = first?.firstArrival ?? dossier.trip.start
-  const middleEnd = last?.lastDeparture ?? dossier.trip.end
+  const chapterSize = Math.max(1, Math.ceil(dossier.destinations.length / 4))
+  const chapters = dossier.destinations.length
+    ? Array.from({ length: Math.ceil(dossier.destinations.length / chapterSize) }, (_, index) => {
+        const group = dossier.destinations.slice(index * chapterSize, (index + 1) * chapterSize)
+        const chapterFirst = group[0]
+        const chapterLast = group.at(-1)!
+        const names = group.map((destination) => destination.name)
+        return {
+          title: names.length === 1 ? names[0] : `${names[0]} to ${names.at(-1)}`,
+          start: chapterFirst.firstArrival,
+          end: chapterLast.lastDeparture,
+          summary: `Timeline records time in ${new Intl.ListFormat('en-US', { style: 'long', type: 'conjunction' }).format(names)}.`,
+        }
+      })
+    : [{ title: dossier.trip.title, start: dossier.trip.start, end: dossier.trip.end, summary: 'Timeline recorded movement during these dates.' }]
   const observedHighlights: MemoryPlan['highlights'] = []
   if (longestLeg) {
     observedHighlights.push({
       timestamp: longestLeg.start,
-      title: longestLeg.mode === 'flight' ? 'The long crossing' : `The longest ${longestLeg.mode} leg`,
-      description: `${Math.round(longestLeg.distanceKm).toLocaleString()} km of ${longestLeg.mode} movement anchors the largest transition in the record.`,
+      title: longestLeg.from && longestLeg.to ? `${longestLeg.from} to ${longestLeg.to}` : `Longest ${longestLeg.mode} leg`,
+      description: `${Math.round(longestLeg.distanceKm).toLocaleString()} km by ${longestLeg.mode}.`,
       groundingIds: [longestLeg.id],
       certainty: 'observed',
     })
@@ -159,8 +199,8 @@ export function createDeterministicMemoryPlan(dossier: MemoryDossier): MemoryPla
   if (last) {
     observedHighlights.push({
       timestamp: last.firstArrival,
-      title: `Arrival at ${last.name}`,
-      description: `The Timeline records an arrival and a stay of ${Math.max(1, Math.round(last.durationMinutes / 60))} hours.`,
+      title: `Arrived in ${last.name}`,
+      description: `${Math.max(1, Math.round(last.durationMinutes / 60))} recorded hours in ${last.name}.`,
       groundingIds: [last.id],
       certainty: 'observed',
     })
@@ -175,29 +215,25 @@ export function createDeterministicMemoryPlan(dossier: MemoryDossier): MemoryPla
     })
   }
   return {
-    title: destinations.length > 1 ? `${destinations[0]} to ${destinations.at(-1)}` : dossier.trip.title,
-    oneLineMemory: latestAnswer?.answer.trim() || `${dossier.trip.durationDays} days, ${dossier.trip.nightsAway} nights, and ${Math.round(dossier.trip.totalDistanceKm).toLocaleString()} km reconstructed from Timeline evidence.`,
-    chapters: [
-      { title: 'Leaving the familiar radius', start: dossier.trip.start, end: middleStart, summary: 'The record moves away from Home and into the first sustained destination.' },
-      { title: 'The journey between', start: middleStart, end: middleEnd, summary: destinations.length ? `Movement connects ${destinations.join(', ')}.` : 'The middle of the journey is held by its visits and movement legs.' },
-      { title: 'The return boundary', start: middleEnd, end: dossier.trip.end, summary: 'The final movement closes when the route returns to the home radius.' },
-    ],
+    title: dossier.trip.title,
+    oneLineMemory: latestAnswer?.answer.trim() || (destinations.length ? new Intl.ListFormat('en-US', { style: 'long', type: 'conjunction' }).format(destinations) : dossier.trip.title),
+    chapters,
     highlights: observedHighlights,
     captions: observedHighlights.map((highlight) => ({ timestamp: highlight.timestamp, text: highlight.description, groundingIds: highlight.groundingIds })),
     reflectionQuestions: [
       {
         id: 'first-detail',
-        question: `What is the first detail you remember from ${first?.name ?? 'this journey'} that the map cannot show?`,
-        reason: 'Location evidence records presence, not the personal detail that made the moment matter.',
+        question: `What do you remember first about arriving in ${first?.name ?? 'the first stop'}?`,
+        reason: 'Timeline records the arrival, not what you noticed.',
       },
       {
         id: 'return-feeling',
-        question: 'What changed between leaving Home and returning?',
-        reason: 'The route closes geographically, but the data cannot know what the journey changed for you.',
+        question: `What do you remember about the trip home from ${last?.name ?? 'the final stop'}?`,
+        reason: 'Timeline records the return. You remember the rest.',
       },
     ],
     uncertaintyNotes: dossier.uncertainties.length
       ? dossier.uncertainties
-      : ['The Timeline establishes movement and duration, but not companions, purpose, activities, or emotion.'],
+      : ['Timeline does not record companions, purpose, or what happened between stops.'],
   }
 }

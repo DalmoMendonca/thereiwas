@@ -22,7 +22,6 @@ interface AppState {
   error?: string
   initialize: () => Promise<void>
   importText: (text: string, sourceName: string) => Promise<void>
-  loadSample: () => Promise<void>
   openTrip: (tripId: string) => void
   showTrips: () => void
   showHome: () => void
@@ -106,15 +105,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ importProgress: undefined, error: error instanceof Error ? error.message : 'Timeline import failed.' })
     }
   },
-  loadSample: async () => {
-    try {
-      const response = await fetch('/sample/sample-timeline.json')
-      if (!response.ok) throw new Error('The sample journey could not be loaded.')
-      await get().importText(await response.text(), 'Generated sample journey')
-    } catch (error) {
-      set({ importProgress: undefined, error: error instanceof Error ? error.message : 'The sample journey could not be loaded.' })
-    }
-  },
   openTrip: (tripId) => {
     set({ activeTripId: tripId, view: 'trip' })
     void persist(get())
@@ -163,4 +153,3 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   clearError: () => set({ error: undefined }),
 }))
-

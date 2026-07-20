@@ -1,54 +1,199 @@
 import { coordinateKey, haversineKm } from './geo'
-import type { HomeInference, Leg, NormalizedTimeline, TripRecord, Visit } from './types'
+import type {
+  Coordinate,
+  HomeInference,
+  Leg,
+  NormalizedTimeline,
+  PlaceSummary,
+  TripDestination,
+  TripRecord,
+  Visit,
+} from './types'
 
 const HOUR = 60 * 60 * 1000
 const DAY = 24 * HOUR
+const HOME_RADIUS_KM = 40
 
-function durationHours(start: string, end: string): number {
-  return Math.max(0, Date.parse(end) - Date.parse(start)) / HOUR
+function durationMinutes(start: string, end: string): number {
+  return Math.max(0, Date.parse(end) - Date.parse(start)) / 60_000
 }
 
-function localHour(iso: string): number {
-  const match = /T(\d{2})/.exec(iso)
-  return match ? Number(match[1]) : new Date(iso).getUTCHours()
+function calendarNights(start: string, end: string): number {
+  const startDay = Date.parse(`${start.slice(0, 10)}T00:00:00.000Z`)
+  const endDay = Date.parse(`${end.slice(0, 10)}T00:00:00.000Z`)
+  return Math.max(1, Math.round((endDay - startDay) / DAY))
 }
 
-function spansOvernight(visit: Visit): boolean {
-  return durationHours(visit.start, visit.end) >= 6 && (localHour(visit.start) >= 18 || localHour(visit.end) <= 8)
+function placeForVisit(timeline: NormalizedTimeline, visit: Visit): PlaceSummary | undefined {
+  return visit.placeId ? timeline.places[visit.placeId] : undefined
+}
+
+function homeFromVisit(timeline: NormalizedTimeline, visit: Visit, reason: string): HomeInference {
+  const place = placeForVisit(timeline, visit)
+  return {
+    coordinate: visit.coordinate!,
+    placeId: visit.placeId,
+    displayName: 'Home',
+    confidence: Math.max(0.94, visit.confidence ?? 0),
+    reason,
+    locality: place?.locality,
+    region: place?.region,
+    country: place?.country,
+    countryCode: place?.countryCode,
+  }
+}
+
+function semanticHomeVisits(timeline: NormalizedTimeline): Visit[] {
+  return timeline.visits
+    .filter((visit) => visit.coordinate && visit.semanticType?.toLowerCase() === 'home')
+    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
 }
 
 export function inferHome(timeline: NormalizedTimeline): HomeInference | undefined {
-  const semantic = timeline.visits.filter((visit) => visit.coordinate && visit.semanticType?.toLowerCase() === 'home')
+  const semantic = semanticHomeVisits(timeline)
   if (semantic.length) {
-    const primary = semantic.sort((a, b) => durationHours(b.start, b.end) - durationHours(a.start, a.end))[0]
-    return {
-      coordinate: primary.coordinate!,
-      placeId: primary.placeId,
-      displayName: 'Home',
-      confidence: Math.max(0.92, primary.confidence ?? 0),
-      reason: 'Timeline explicitly identified this recurring overnight place as Home.',
-    }
+    const latest = semantic.at(-1)!
+    return homeFromVisit(timeline, latest, 'Timeline identified this location as Home in the most recent records.')
   }
 
-  const clusters = new Map<string, { coordinate: { lat: number; lng: number }; visits: Visit[]; score: number }>()
+  const clusters = new Map<string, { coordinate: Coordinate; visits: Visit[]; minutes: number }>()
   for (const visit of timeline.visits) {
-    if (!visit.coordinate || !spansOvernight(visit)) continue
+    if (!visit.coordinate || durationMinutes(visit.start, visit.end) < 6 * 60) continue
     const key = coordinateKey(visit.coordinate, 2)
-    const existing = clusters.get(key) ?? { coordinate: visit.coordinate, visits: [], score: 0 }
-    existing.visits.push(visit)
-    existing.score += Math.min(24, durationHours(visit.start, visit.end)) + 12
-    clusters.set(key, existing)
+    const cluster = clusters.get(key) ?? { coordinate: visit.coordinate, visits: [], minutes: 0 }
+    cluster.visits.push(visit)
+    cluster.minutes += Math.min(24 * 60, durationMinutes(visit.start, visit.end))
+    clusters.set(key, cluster)
   }
-  const winner = [...clusters.values()].sort((a, b) => b.score - a.score)[0]
+  const winner = [...clusters.values()].sort((a, b) => b.minutes - a.minutes)[0]
   if (!winner) return undefined
-  const dateSpan = Date.parse(winner.visits.at(-1)!.end) - Date.parse(winner.visits[0].start)
+  const place = placeForVisit(timeline, winner.visits[0])
   return {
     coordinate: winner.coordinate,
     placeId: winner.visits[0].placeId,
-    displayName: winner.visits[0].displayName ?? 'Likely home',
-    confidence: Math.min(0.89, 0.48 + winner.visits.length * 0.08 + Math.min(0.2, dateSpan / (90 * DAY) / 5)),
-    reason: 'This was the most persistent recurring overnight location in the imported dates.',
+    displayName: 'Likely home',
+    confidence: Math.min(0.89, 0.5 + winner.visits.length * 0.025),
+    reason: 'This is the most persistent overnight location in the imported dates.',
+    locality: place?.locality,
+    region: place?.region,
+    country: place?.country,
+    countryCode: place?.countryCode,
   }
+}
+
+function inferHomeAt(timeline: NormalizedTimeline, timestamp: string): HomeInference | undefined {
+  const homes = semanticHomeVisits(timeline)
+  if (!homes.length) return inferHome(timeline)
+  const target = Date.parse(timestamp)
+  const before = homes.filter((visit) => Date.parse(visit.start) <= target).at(-1)
+  const nearest = before ?? homes[0]
+  return homeFromVisit(timeline, nearest, 'Timeline identified this location as Home near these dates.')
+}
+
+interface HomePresence {
+  start: string
+  end: string
+  coordinate: Coordinate
+  placeId?: string
+}
+
+function mergeHomePresences(visits: Visit[]): HomePresence[] {
+  const presences: HomePresence[] = []
+  for (const visit of visits) {
+    const current = presences.at(-1)
+    if (
+      current
+      && Date.parse(visit.start) - Date.parse(current.end) <= 6 * HOUR
+      && haversineKm(current.coordinate, visit.coordinate!) < 15
+    ) {
+      if (Date.parse(visit.end) > Date.parse(current.end)) current.end = visit.end
+      continue
+    }
+    presences.push({ start: visit.start, end: visit.end, coordinate: visit.coordinate!, placeId: visit.placeId })
+  }
+  return presences
+}
+
+function significantDestinations(
+  timeline: NormalizedTimeline,
+  visits: Visit[],
+  home: HomeInference,
+): TripDestination[] {
+  interface DestinationGroup extends TripDestination { overnight: boolean }
+  const groups = new Map<string, DestinationGroup>()
+
+  for (const visit of visits) {
+    if (!visit.coordinate || visit.semanticType?.toLowerCase() === 'home') continue
+    if (haversineKm(visit.coordinate, home.coordinate) < HOME_RADIUS_KM) continue
+    const place = placeForVisit(timeline, visit)
+    const locality = place?.locality ?? visit.displayName
+    const name = locality ?? place?.region ?? place?.country ?? `${visit.coordinate.lat.toFixed(2)}, ${visit.coordinate.lng.toFixed(2)}`
+    const id = [place?.countryCode, place?.region, locality ?? coordinateKey(visit.coordinate, 2)].filter(Boolean).join('|')
+    const minutes = durationMinutes(visit.start, visit.end)
+    const existing = groups.get(id)
+    if (existing) {
+      existing.durationMinutes += minutes
+      existing.visitIds.push(visit.id)
+      if (Date.parse(visit.start) < Date.parse(existing.firstArrival)) existing.firstArrival = visit.start
+      if (Date.parse(visit.end) > Date.parse(existing.lastDeparture)) existing.lastDeparture = visit.end
+      existing.overnight ||= visit.start.slice(0, 10) !== visit.end.slice(0, 10)
+      continue
+    }
+    groups.set(id, {
+      id,
+      name,
+      locality,
+      region: place?.region,
+      country: place?.country,
+      countryCode: place?.countryCode,
+      coordinate: visit.coordinate,
+      firstArrival: visit.start,
+      lastDeparture: visit.end,
+      durationMinutes: minutes,
+      visitIds: [visit.id],
+      overnight: visit.start.slice(0, 10) !== visit.end.slice(0, 10),
+    })
+  }
+
+  const ordered = [...groups.values()].sort((a, b) => Date.parse(a.firstArrival) - Date.parse(b.firstArrival))
+  const significant = ordered.filter((destination) => destination.durationMinutes >= 240 || destination.overnight || destination.visitIds.length >= 3)
+  const selected = significant.length ? significant : [...ordered].sort((a, b) => b.durationMinutes - a.durationMinutes).slice(0, 3)
+  return selected
+    .sort((a, b) => Date.parse(a.firstArrival) - Date.parse(b.firstArrival))
+    .map(({ overnight: _overnight, ...destination }) => destination)
+}
+
+function totalBy<T extends string>(destinations: TripDestination[], value: (destination: TripDestination) => T | undefined) {
+  const totals = new Map<T, number>()
+  for (const destination of destinations) {
+    const key = value(destination)
+    if (key) totals.set(key, (totals.get(key) ?? 0) + destination.durationMinutes)
+  }
+  return [...totals.entries()].sort((a, b) => b[1] - a[1])
+}
+
+export function titleForDestinations(destinations: TripDestination[], home?: HomeInference): string {
+  if (!destinations.length) return 'Trip'
+  const totalMinutes = destinations.reduce((sum, destination) => sum + destination.durationMinutes, 0) || 1
+  const countries = totalBy(destinations, (destination) => destination.country)
+  const countryCodes = totalBy(destinations, (destination) => destination.countryCode)
+  const regions = totalBy(destinations, (destination) => destination.region)
+  const localities = totalBy(destinations, (destination) => destination.locality)
+  const dominantCountryCode = countryCodes[0]
+  const dominantCountry = countries[0]
+
+  if (
+    dominantCountry
+    && dominantCountryCode
+    && dominantCountryCode[0] !== home?.countryCode
+    && dominantCountry[1] / totalMinutes >= 0.55
+    && localities.length > 1
+  ) return dominantCountry[0]
+
+  const dominantRegion = regions[0]
+  if (dominantRegion && dominantRegion[1] / totalMinutes >= 0.62 && localities.length > 1) return dominantRegion[0]
+  if (localities[0]) return localities[0][0]
+  return dominantRegion?.[0] ?? dominantCountry?.[0] ?? destinations[0].name
 }
 
 function totalLegDistanceKm(legs: Leg[]): number {
@@ -59,67 +204,48 @@ function totalLegDistanceKm(legs: Leg[]): number {
   }, 0)
 }
 
-function titleFor(visits: Visit[]): string {
-  const names = [...new Set(visits.map((visit) => visit.displayName).filter((name): name is string => Boolean(name && name !== 'Home')))]
-  if (!names.length) return 'A journey away from home'
-  if (names.length === 1) return names[0]
-  if (names.length === 2) return `${names[0]} & ${names[1]}`
-  return `${names[0]} to ${names.at(-1)}`
-}
-
 function buildTrip(
   timeline: NormalizedTimeline,
   home: HomeInference,
-  awayVisits: Visit[],
-  index: number,
-  source: 'detected' | 'user' = 'detected',
-  lockedRange?: { start: string; end: string; title?: string },
+  range: { start: string; end: string; title?: string },
+  source: 'detected' | 'user',
 ): TripRecord {
-  const firstAway = awayVisits[0]
-  const lastAway = awayVisits.at(-1)!
-  const precedingLeg = [...timeline.legs]
-    .reverse()
-    .find((leg) => Date.parse(leg.start) <= Date.parse(firstAway.start) && leg.origin && haversineKm(leg.origin, home.coordinate) < 40)
-  const followingLeg = timeline.legs.find(
-    (leg) => Date.parse(leg.end) >= Date.parse(lastAway.end) && leg.destination && haversineKm(leg.destination, home.coordinate) < 40,
-  )
-  const start = lockedRange?.start ?? precedingLeg?.start ?? firstAway.start
-  const end = lockedRange?.end ?? followingLeg?.end ?? lastAway.end
-  const visits = timeline.visits.filter((visit) => Date.parse(visit.end) >= Date.parse(start) && Date.parse(visit.start) <= Date.parse(end))
-  const relevantAwayVisits = visits.filter((visit) => visit.coordinate && haversineKm(visit.coordinate, home.coordinate) >= 40)
-  const legs = timeline.legs.filter((leg) => Date.parse(leg.end) >= Date.parse(start) && Date.parse(leg.start) <= Date.parse(end))
-  const memories = timeline.memories.filter((memory) => Date.parse(memory.end) >= Date.parse(start) && Date.parse(memory.start) <= Date.parse(end))
-  const farthestDistance = Math.max(0, ...relevantAwayVisits.map((visit) => haversineKm(visit.coordinate!, home.coordinate)))
-  const nightsAway = Math.max(1, Math.round((Date.parse(end) - Date.parse(start)) / DAY) - 1)
-  const destinationIds = [...new Set(relevantAwayVisits.map((visit) => visit.placeId ?? visit.id))]
-  const modes = [...new Set(legs.map((leg) => leg.mode))]
-  const coverageScore = Math.max(0.3, Math.min(1, 0.55 + legs.filter((leg) => leg.observedPath.length > 1).length * 0.08 - timeline.quarantined.length * 0.03))
-  const reasons = [
-    `You left the inferred home area and traveled as far as ${Math.round(farthestDistance).toLocaleString()} km away.`,
-    `The interval includes ${nightsAway} night${nightsAway === 1 ? '' : 's'} away across ${destinationIds.length} significant destination${destinationIds.length === 1 ? '' : 's'}.`,
-  ]
-  if (modes.includes('flight')) reasons.push('A flight connects the home region to the journey and back.')
-  if (memories.length) reasons.push('A Timeline Memory independently supports these dates.')
+  const visits = timeline.visits.filter((visit) => Date.parse(visit.end) >= Date.parse(range.start) && Date.parse(visit.start) <= Date.parse(range.end))
+  const legs = timeline.legs.filter((leg) => Date.parse(leg.end) >= Date.parse(range.start) && Date.parse(leg.start) <= Date.parse(range.end))
+  const memories = timeline.memories.filter((memory) => Date.parse(memory.end) >= Date.parse(range.start) && Date.parse(memory.start) <= Date.parse(range.end))
+  const awayVisits = visits.filter((visit) => visit.coordinate && visit.semanticType?.toLowerCase() !== 'home' && haversineKm(visit.coordinate, home.coordinate) >= HOME_RADIUS_KM)
+  const destinations = significantDestinations(timeline, awayVisits, home)
+  const farthestDistance = Math.max(0, ...awayVisits.map((visit) => haversineKm(visit.coordinate!, home.coordinate)))
+  const modes = [...new Set(legs.map((leg) => leg.mode).filter((mode) => mode !== 'unknown'))]
+  const coverageScore = legs.length
+    ? Math.max(0.25, Math.min(1, legs.filter((leg) => leg.observedPath.length > 1).length / legs.length))
+    : 0
+  const nightsAway = calendarNights(range.start, range.end)
   const now = new Date().toISOString()
+  const reasons = [`${nightsAway} night${nightsAway === 1 ? '' : 's'} between visits to Home.`]
+  if (modes.includes('flight')) reasons.push('Timeline recorded at least one flight.')
+  if (memories.length) reasons.push('A Timeline Memory overlaps these dates.')
+
   return {
-    id: `${source}-trip-${index}-${Date.parse(start).toString(36)}`,
+    id: `${source}-trip-${Date.parse(range.start).toString(36)}-${Date.parse(range.end).toString(36)}`,
     source,
     status: source === 'detected' ? 'proposed' : 'confirmed',
-    title: lockedRange?.title?.trim() || titleFor(relevantAwayVisits),
-    start,
-    end,
+    title: range.title?.trim() || titleForDestinations(destinations, home),
+    start: range.start,
+    end: range.end,
     startLocked: source === 'user',
     endLocked: source === 'user',
-    destinationIds,
+    destinationIds: destinations.map((destination) => destination.id),
+    destinations,
     visitIds: visits.map((visit) => visit.id),
     legIds: legs.map((leg) => leg.id),
     evidence: {
-      start,
-      end,
+      start: range.start,
+      end: range.end,
       homeDistanceKm: farthestDistance,
       nightsAway,
-      destinationCount: destinationIds.length,
-      modes,
+      destinationCount: destinations.length,
+      modes: modes.length ? modes : ['unknown'],
       timelineMemorySupport: memories.length > 0,
       coverageScore,
       reasons,
@@ -129,47 +255,78 @@ function buildTrip(
   }
 }
 
-export function detectTrips(timeline: NormalizedTimeline, home = inferHome(timeline)): TripRecord[] {
-  if (!home) return []
-  const awayVisits = timeline.visits
-    .filter((visit) => visit.coordinate && haversineKm(visit.coordinate, home.coordinate) >= 40)
-    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
-  if (!awayVisits.length) return []
+function detectFromHomeReturns(timeline: NormalizedTimeline): TripRecord[] {
+  const homes = mergeHomePresences(semanticHomeVisits(timeline))
+  const trips: TripRecord[] = []
 
+  for (let index = 0; index < homes.length - 1; index += 1) {
+    const departureHome = homes[index]
+    const returnHome = homes[index + 1]
+    const startMs = Date.parse(departureHome.end)
+    const endMs = Date.parse(returnHome.start)
+    const durationMs = endMs - startMs
+    if (durationMs <= 0) continue
+
+    const hasMemory = timeline.memories.some((memory) => Date.parse(memory.end) >= startMs && Date.parse(memory.start) <= endMs)
+    const hasFlight = timeline.legs.some((leg) => leg.mode === 'flight' && Date.parse(leg.end) >= startMs && Date.parse(leg.start) <= endMs)
+    if (durationMs < 18 * HOUR && !hasMemory && !hasFlight) continue
+
+    const homeShiftKm = haversineKm(departureHome.coordinate, returnHome.coordinate)
+    if (homeShiftKm >= HOME_RADIUS_KM && durationMs >= 7 * DAY) continue
+    if (durationMs > 180 * DAY) continue
+
+    const home = inferHomeAt(timeline, departureHome.end)
+    if (!home) continue
+    const awayVisits = timeline.visits.filter((visit) =>
+      visit.coordinate
+      && visit.semanticType?.toLowerCase() !== 'home'
+      && Date.parse(visit.end) >= startMs
+      && Date.parse(visit.start) <= endMs
+      && haversineKm(visit.coordinate, home.coordinate) >= HOME_RADIUS_KM,
+    )
+    if (!awayVisits.length && !hasMemory && !hasFlight) continue
+
+    const trip = buildTrip(timeline, home, { start: departureHome.end, end: returnHome.start }, 'detected')
+    if (trip.destinations.length || hasMemory || hasFlight) trips.push(trip)
+  }
+
+  return trips
+}
+
+function detectFromSingleHome(timeline: NormalizedTimeline, home: HomeInference): TripRecord[] {
+  const awayVisits = timeline.visits
+    .filter((visit) => visit.coordinate && visit.semanticType?.toLowerCase() !== 'home' && haversineKm(visit.coordinate, home.coordinate) >= HOME_RADIUS_KM)
+    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
   const groups: Visit[][] = []
   for (const visit of awayVisits) {
     const current = groups.at(-1)
-    const coveredUntil = current ? Math.max(...current.map((item) => Date.parse(item.end))) : 0
-    if (!current || Date.parse(visit.start) - coveredUntil >= 18 * HOUR) groups.push([visit])
+    if (!current || Date.parse(visit.start) - Date.parse(current.at(-1)!.end) >= 18 * HOUR) groups.push([visit])
     else current.push(visit)
   }
+  return groups
+    .filter((group) => Date.parse(group.at(-1)!.end) - Date.parse(group[0].start) >= 18 * HOUR)
+    .map((group) => buildTrip(timeline, home, { start: group[0].start, end: group.at(-1)!.end }, 'detected'))
+}
 
-  return groups.flatMap((group, index) => {
-    const duration = Date.parse(group.at(-1)!.end) - Date.parse(group[0].start)
-    const hasFlight = timeline.legs.some(
-      (leg) => leg.mode === 'flight' && Date.parse(leg.end) >= Date.parse(group[0].start) - DAY && Date.parse(leg.start) <= Date.parse(group.at(-1)!.end) + DAY,
-    )
-    const memorySupport = timeline.memories.some(
-      (memory) => Date.parse(memory.end) >= Date.parse(group[0].start) && Date.parse(memory.start) <= Date.parse(group.at(-1)!.end),
-    )
-    const returnObserved = timeline.visits.some(
-      (visit) => visit.coordinate && Date.parse(visit.start) >= Date.parse(group.at(-1)!.end) && haversineKm(visit.coordinate, home.coordinate) < 40 && durationHours(visit.start, visit.end) >= 6,
-    )
-    const relocationLike = !returnObserved && duration > 30 * DAY
-    if (relocationLike || (duration < 18 * HOUR && !hasFlight && !memorySupport)) return []
-    return [buildTrip(timeline, home, group, index)]
-  })
+export function detectTrips(timeline: NormalizedTimeline, fallbackHome = inferHome(timeline)): TripRecord[] {
+  const homes = semanticHomeVisits(timeline)
+  const trips = homes.length >= 2
+    ? detectFromHomeReturns(timeline)
+    : fallbackHome ? detectFromSingleHome(timeline, fallbackHome) : []
+  const unique = new Map<string, TripRecord>()
+  for (const trip of trips) unique.set(`${trip.start}|${trip.end}`, trip)
+  return [...unique.values()].sort((a, b) => Date.parse(b.start) - Date.parse(a.start))
 }
 
 export function createManualTrip(
   timeline: NormalizedTimeline,
   input: { start: string; end: string; title?: string },
-  home = inferHome(timeline),
+  fallbackHome = inferHome(timeline),
 ): TripRecord {
-  if (!home) throw new Error('A likely home is needed before creating a trip from these dates.')
   if (Date.parse(input.end) <= Date.parse(input.start)) throw new Error('The end of a trip must be after its start.')
-  const visits = timeline.visits.filter((visit) => Date.parse(visit.end) >= Date.parse(input.start) && Date.parse(visit.start) <= Date.parse(input.end))
-  return buildTrip(timeline, home, visits.length ? visits : timeline.visits.slice(0, 1), Date.now(), 'user', input)
+  const home = inferHomeAt(timeline, input.start) ?? fallbackHome
+  if (!home) throw new Error('There is not enough Home history to create this trip.')
+  return buildTrip(timeline, home, input, 'user')
 }
 
 export function tripDistanceKm(timeline: NormalizedTimeline, trip: TripRecord): number {

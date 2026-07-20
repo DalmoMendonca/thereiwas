@@ -28,6 +28,7 @@ export interface Visit {
   coordinate?: Coordinate
   placeId?: string
   semanticType?: string
+  hierarchyLevel?: number
   confidence?: number
   displayName?: string
   sourceIds: string[]
@@ -53,7 +54,8 @@ export interface PlaceSummary {
   locality?: string
   region?: string
   country?: string
-  labelSource: 'sample' | 'temporary-geocode' | 'user' | 'coordinate'
+  countryCode?: string
+  labelSource: 'embedded' | 'gazetteer' | 'temporary-geocode' | 'user' | 'coordinate'
 }
 
 export interface TimelineMemory {
@@ -90,9 +92,14 @@ export interface HomeInference {
   displayName: string
   confidence: number
   reason: string
+  locality?: string
+  region?: string
+  country?: string
+  countryCode?: string
 }
 
 export interface NormalizedTimeline {
+  schemaVersion: 2
   id: string
   sourceName: string
   importedAt: string
@@ -102,6 +109,20 @@ export interface NormalizedTimeline {
   memories: TimelineMemory[]
   quarantined: QuarantinedRecord[]
   report: ImportReport
+}
+
+export interface TripDestination {
+  id: string
+  name: string
+  locality?: string
+  region?: string
+  country?: string
+  countryCode?: string
+  coordinate: Coordinate
+  firstArrival: string
+  lastDeparture: string
+  durationMinutes: number
+  visitIds: string[]
 }
 
 export interface TripEvidence {
@@ -126,6 +147,7 @@ export interface TripRecord {
   startLocked: boolean
   endLocked: boolean
   destinationIds: string[]
+  destinations: TripDestination[]
   visitIds: string[]
   legIds: string[]
   evidence: TripEvidence
@@ -181,6 +203,9 @@ export interface MemoryDossier {
   destinations: Array<{
     id: string
     name: string
+    locality?: string
+    region?: string
+    country?: string
     firstArrival: string
     lastDeparture: string
     durationMinutes: number
@@ -191,6 +216,8 @@ export interface MemoryDossier {
     end: string
     mode: TravelMode
     distanceKm: number
+    from?: string
+    to?: string
   }>
   days: Array<{
     date: string
@@ -203,4 +230,3 @@ export interface MemoryDossier {
   userNotes: string[]
   reflectionAnswers: ReflectionAnswer[]
 }
-

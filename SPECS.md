@@ -1,6 +1,8 @@
 # THERE I WAS
 ## Authoritative Codex Build Instructions for OpenAI Build Week
 
+> **Product reset, July 20, 2026:** Direct user testing supersedes every contradictory requirement below. There is no sample journey or fake data in the product. The landing page is a no-scroll screen with one `Import Timeline JSON` action and the `Build with ❤️ | dalmo.ai` footer. Trip rows use real geographic titles, chronological significant-city trails, and numeric dates. The trip page centers a tightly fitted full-route replay with persistent route geometry, miles in a small side rail, no finale overlay, and no point-by-point journey thread. GPT-5.6 receives resolved city, region, country, date, mode, and summarized-leg evidence; it must never produce “Unnamed stop.” Submission copy and the demo video remain unchanged until the user approves the reset.
+
 **Repository:** `thereiwas`  
 **GitHub target:** `DalmoMendonca/thereiwas`  
 **Visibility:** Public  
