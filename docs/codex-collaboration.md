@@ -38,6 +38,10 @@ The first replay formatted timestamps in UTC even though the importer preserved 
 
 Uniformly compressing a week into thirty seconds rushed the flight and spent too much time on quiet gaps. Codex added cinematic keyframes that weight flights, major ground legs, overnight pauses, arrivals, and the final reveal independently from raw duration.
 
+### Production secret and function deadline
+
+The first production function returned the deterministic plan even though the key had been set through Netlify CLI. Codex proved the key and exact Structured Outputs request independently, then traced the deployment: Netlify CLI 24 used a team display slug that did not create the environment variable, while narrow scopes were unavailable on the account plan. The canonical account slug and plan-compatible secret scopes fixed injection. A second live test exposed Netlify's 30-second synchronous ceiling. Low reasoning effort, no retry, a 24-second SDK timeout, and a smaller output budget brought the same validated plan under the ceiling while preserving deterministic fallback.
+
 ## Significant human decisions
 
 - Timeline JSON is the only required input.
@@ -66,5 +70,5 @@ Codex’s working standard: gate every later feature on the sample golden path, 
 
 ## Representative commits
 
-This section is updated from actual Git history as milestones are verified and pushed. Commit messages separate foundation/import, trip intelligence/manual authority, routes/playback, Memory Director, production polish, and release evidence.
-
+- `9523d0c` — `Initialize There I Was competition build`
+- `Harden production release and live GPT-5.6 path` — final deployment, mobile reliability, rate-limit fallback, and release evidence

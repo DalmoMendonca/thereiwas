@@ -6,7 +6,7 @@ import { createDeterministicMemoryPlan, memoryPlanSchema } from '../../src/domai
 
 const MAX_BODY_BYTES = 48_000
 const WINDOW_MS = 10 * 60 * 1000
-const MAX_REQUESTS_PER_WINDOW = 6
+const MAX_REQUESTS_PER_WINDOW = 12
 
 const dossierSchema = z.object({
   trip: z.object({
@@ -83,9 +83,6 @@ export const handler: Handler = async (event) => {
   if (!event.headers['content-type']?.toLowerCase().includes('application/json')) return response(415, { error: 'Send the Memory Dossier as JSON.' }, origin)
   const size = Number(event.headers['content-length'] ?? new TextEncoder().encode(event.body ?? '').byteLength)
   if (!Number.isFinite(size) || size > MAX_BODY_BYTES) return response(413, { error: 'The selected trip summary is too large.' }, origin)
-  const ip = event.headers['x-nf-client-connection-ip'] ?? event.headers['x-forwarded-for']?.split(',')[0]?.trim() ?? 'unknown'
-  if (!permit(ip)) return response(429, { error: 'Memory Director is resting for a few minutes. Your saved story is still available.' }, origin)
-
   let dossier: z.infer<typeof dossierSchema>
   try {
     dossier = dossierSchema.parse(JSON.parse(event.body ?? '{}'))
@@ -94,18 +91,30 @@ export const handler: Handler = async (event) => {
   }
 
   const fallback = createDeterministicMemoryPlan(dossier)
+  const ip = event.headers['x-nf-client-connection-ip'] ?? event.headers['x-forwarded-for']?.split(',')[0]?.trim() ?? 'unknown'
+  if (!permit(ip)) {
+    return response(200, {
+      plan: fallback,
+      source: 'rate-limited-fallback',
+      model: null,
+      notice: 'Memory Director is resting for a few minutes, so a grounded local structure was used.',
+    }, origin)
+  }
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return response(200, { plan: fallback, source: 'deterministic-fallback', model: null }, origin)
 
   try {
-    const client = new OpenAI({ apiKey, timeout: 28_000, maxRetries: 1 })
+    // Netlify's synchronous function ceiling is 30 seconds. Keep enough room to
+    // validate and return the deterministic plan if the model is slow.
+    const client = new OpenAI({ apiKey, timeout: 24_000, maxRetries: 0 })
     const result = await client.responses.parse({
       model: process.env.OPENAI_MODEL || 'gpt-5.6',
       store: false,
+      reasoning: { effort: 'low' },
       instructions,
       input: JSON.stringify(dossier),
       text: { format: zodTextFormat(memoryPlanSchema, 'memory_plan') },
-      max_output_tokens: 4500,
+      max_output_tokens: 2500,
     })
     const parsed = result.output_parsed
     if (!parsed) throw new Error('Structured response was empty.')
@@ -114,4 +123,3 @@ export const handler: Handler = async (event) => {
     return response(200, { plan: fallback, source: 'deterministic-fallback', model: null, notice: 'The live direction was unavailable, so a grounded local structure was used.' }, origin)
   }
 }
-

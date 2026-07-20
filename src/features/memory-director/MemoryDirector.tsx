@@ -19,6 +19,11 @@ interface RequestRecord {
   status: string
 }
 
+function modelLabel(model?: string | null) {
+  if (!model) return 'GPT-5.6'
+  return model.replace(/^gpt-/i, 'GPT-')
+}
+
 function formatDate(timestamp: string) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(timestamp))
 }
@@ -107,7 +112,7 @@ export function MemoryDirector({ timeline, trip, active, onActivate }: MemoryDir
       const payload = (await response.json()) as { plan: unknown; source?: string; model?: string | null; notice?: string }
       const next = validateMemoryPlan(payload.plan)
       await persistPlan(next)
-      setNotice(payload.notice ?? (payload.source === 'openai' ? `Directed live with ${payload.model ?? 'GPT-5.6'}.` : 'A grounded deterministic structure was used.'))
+      setNotice(payload.notice ?? (payload.source === 'openai' ? `Directed live with ${modelLabel(payload.model)}.` : 'A grounded deterministic structure was used.'))
       setRequestRecords((records) => records.map((record, index) => index === 0 ? { ...record, status: payload.source === 'openai' ? 'Complete' : 'Fallback used' } : record))
     } catch {
       const fallback = createDeterministicMemoryPlan(liveDossier)

@@ -18,10 +18,8 @@ test('judge golden path works without private setup and persists human authority
   await expect(page.getByText('There is enough evidence to call this a journey.')).toBeVisible()
 
   await page.getByRole('button', { name: 'Play journey' }).click()
-  await page.waitForTimeout(350)
   await expect(page.getByRole('button', { name: 'Pause replay' })).toBeVisible()
-  const progress = Number(await page.getByRole('slider', { name: 'Replay position' }).inputValue())
-  expect(progress).toBeGreaterThan(0)
+  await expect.poll(async () => Number(await page.getByRole('slider', { name: 'Replay position' }).inputValue())).toBeGreaterThan(0)
   await page.getByRole('button', { name: 'Pause replay' }).click()
 
   await page.locator('.trip-titlebar').getByRole('button', { name: 'Direct my memory' }).click()

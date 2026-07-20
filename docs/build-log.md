@@ -12,13 +12,21 @@
 - Corrected playback local time and versioned route cache.
 - Verified strict typecheck, unit tests, production build, desktop rendering, sample import, and playback.
 
-## Remaining release operations
+## 2026-07-19 — Production release hardening
 
-- Complete mobile and golden-path E2E verification.
-- Generate final screenshots.
-- Push the public GitHub repository and link Netlify.
-- Configure and verify `thereiwas.dalmo.ai`.
-- Run production E2E and security scans.
-- Tag `v1.0.0-build-week` and create the release.
+- Published the public repository at `github.com/DalmoMendonca/thereiwas` and connected Netlify continuous deployment to `main`.
+- Created an isolated `thereiwas` Netlify project after detecting an unrelated parent-folder project link before deployment.
+- Added the server key as an unreadable Netlify secret. Netlify CLI 24 initially used the team display slug and silently failed to create the variable; the environment API with the canonical account slug fixed the production injection.
+- Tuned GPT-5.6 Structured Outputs to low reasoning, no retries, and a 24-second client budget after live testing exposed Netlify's 30-second synchronous function ceiling.
+- Expanded the in-memory guard to twelve calls per ten minutes and made rate limiting return a useful grounded plan instead of an error.
+- Verified live GPT-5.6 output through the production function and UI.
+- Added and verified `thereiwas.dalmo.ai` through Netlify DNS, including HTTPS and security headers.
+- Linked the GitHub repository to Netlify for branch and pull-request deploys.
+- Passed the hosted golden path in desktop Chromium and mobile WebKit.
+
+## Remaining submission operations
+
+- Run the final custom-domain E2E and secret scan after the release push.
+- Tag `v1.0.0-build-week` and create the GitHub release.
+- Record and publish the sub-three-minute narrated demo.
 - Fill the Devpost draft and record the judge rubric assessment.
-
