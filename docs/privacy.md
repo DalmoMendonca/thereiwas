@@ -6,7 +6,7 @@ The browser reads the Timeline file, sends its text to a same-origin Web Worker,
 
 MapLibre requests OpenFreeMap vector tiles derived from OpenStreetMap for the visible map. Mapbox receives up to 25 ordered coordinates for each sparse driving, walking, or cycling routing job, including missing joins that close the trip loop. It does not receive the Timeline file, place labels, story dossier, or photos.
 
-Photo metadata and bytes stay in the browser. `exifr` reads them locally, and IndexedDB stores accepted photos under the selected trip.
+Photo metadata and bytes stay in the browser. `exifr` reads them locally, and IndexedDB stores accepted photos under the selected trip. The finished memory card is also drawn locally. The app does not upload, host, or retain the generated PNG.
 
 ## GPT-5.6 boundary
 
@@ -23,7 +23,7 @@ It does not receive the raw Timeline JSON, Home coordinates, raw coordinates, re
 
 ## Server controls
 
-The Netlify Function exposes a metadata-only GET health response and accepts JSON POSTs for story requests. It restricts origins, caps the body at 48 KB, validates the dossier before provider use, rate limits repeated calls per client window, keeps `OPENAI_API_KEY` server-side, validates the structured response, and returns a named-place local fallback when the provider is unavailable. It does not persist dossiers.
+The Netlify Function exposes a metadata-only GET health response and accepts JSON POSTs for direction requests. It restricts origins, caps the body at 48 KB, validates the dossier before provider use, rate limits repeated calls per client window, keeps `OPENAI_API_KEY` server-side, validates the structured response, and returns a named-place local fallback when the provider is unavailable. It does not persist dossiers.
 
 Provider failures are logged only as sanitized error messages for diagnosis. Dossier contents and keys are not logged.
 

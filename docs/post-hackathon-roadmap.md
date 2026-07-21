@@ -23,7 +23,8 @@ Only begin after the submission golden path is stable.
 - Lifetime movement analytics, mobility entropy, and geographic center-of-gravity studies
 - Hosted, explicitly shared story pages
 - Collaborative family memory correction
-- Exportable video, GIF, and high-resolution renders
+- Hosted memory pages with revocable share links
+- Video, GIF, and print variants of the current local PNG artifact
 
 ## Explicitly still deferred
 

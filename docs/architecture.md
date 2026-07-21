@@ -19,7 +19,9 @@ selected trip
   -> Netlify Function validation
   -> OpenAI Responses API, store: false
   -> strict Memory Plan validation
-  -> editable story
+  -> GPT-directed chapters, pacing, and timed map captions
+  -> local 1080 x 1350 memory-card renderer
+  -> downloadable or native-shared PNG
 ```
 
 ## Import
@@ -51,18 +53,20 @@ Every route segment retains provenance:
 
 Sparse evidence is detected by measuring the distance between consecutive recorded points, with mode-specific thresholds for driving, walking, and cycling. Adjacent leg gaps are reconstructed in chronological order. The first and last route coordinates are pinned to Home, including provider routes whose endpoints snap to a nearby road.
 
-MapLibre renders the segments over OpenFreeMap vector tiles derived from OpenStreetMap, with visible attribution. The map fits the entire home-to-home route and keeps it visible. A single animation clock advances the green progress line and orange current-position marker. React does not rerender on every frame.
+MapLibre renders the segments over OpenFreeMap vector tiles derived from OpenStreetMap, with visible attribution. The map fits the entire home-to-home route and keeps it visible. Normal replay uses one continuous clock. A directed replay maps GPT-5.6 chapter boundaries onto cinematic keyframes, then selects the matching timed caption for an on-map overlay. Both modes advance the green progress line and orange current-position marker without rerendering React on every frame.
 
 ## Photos
 
 `exifr` reads capture time and GPS metadata from selected image files. Photos outside the trip window or without GPS are rejected. Accepted blobs are stored in an IndexedDB store keyed by trip, sorted by capture time, and exposed to the replay as map points. Selecting a thumbnail maps its timestamp into replay progress. During playback, the latest reached photo becomes the active viewport image.
 
-## Story
+## Direction and artifact
 
 `buildMemoryDossier` includes only the selected trip's title, dates, named destinations, durations, summarized movement, modes, daily totals, coverage, uncertainty, and explicit user answers. It excludes coordinates, recorded path points, Home coordinates, unrelated dates, and source records.
 
-The Netlify Function limits the body to 48 KB, validates it with Zod, applies origin and rate controls, and calls `openai.responses.parse` using GPT-5.6, Zod `text.format`, low reasoning effort, and `store: false`. The structured plan is validated again. A deterministic named-place plan remains available when the provider times out, refuses, or returns an invalid result.
+The Netlify Function limits the body to 48 KB, validates it with Zod, applies origin and rate controls, and calls `openai.responses.parse` using GPT-5.6, Zod `text.format`, low reasoning effort, and `store: false`. The structured plan is validated again. Its three to five chronological chapters set replay pacing and its timed captions appear on the map as the route advances. A deterministic named-place plan remains available when the provider times out, refuses, or returns an invalid result.
+
+After direction is ready, a browser canvas renders a 1080 by 1350 memory card. It combines the completed loop, title, dates, grounded summary, miles, nights, places, and either local photos or directed chapter titles. The card is exposed as an object URL for preview, PNG download, and the native Web Share API when supported. It is not uploaded or hosted.
 
 ## Persistence
 
-IndexedDB stores the normalized session, trip records, dismissed trips, selected view, route cache, photos, and up to five prior story drafts. Schema version changes invalidate incompatible derived data rather than trying to display stale shapes. Deleting imported data clears every store.
+IndexedDB stores the normalized session, trip records, dismissed trips, selected view, route cache, photos, and up to five prior directions. Memory-card PNGs are generated on demand and are not retained by the app. Schema version changes invalidate incompatible derived data rather than trying to display stale shapes. Deleting imported data clears every store.

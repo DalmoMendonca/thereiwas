@@ -10,16 +10,17 @@ Someone with years of Google Timeline history who wants to revisit real trips wi
 
 ## Purpose
 
-There I Was imports a Google Timeline JSON export, finds journeys between returns home, names the places that mattered, and replays the recorded route. GPT-5.6 can turn a selected trip's compact evidence dossier into an editable story draft. The route is evidence; the person supplies the meaning.
+There I Was imports a Google Timeline JSON export, finds journeys between returns home, names the places that mattered, and rebuilds the recorded route. GPT-5.6 directs the replay by choosing its chapters, pacing, and grounded captions. The traveler edits that direction and saves the finished route as a shareable memory card.
 
 ## Core journey
 
 1. Import Timeline JSON.
 2. Choose a trip named for its primary city, state, or country.
-3. Replay the complete home-to-home path.
-4. Optionally draft and edit a story.
+3. Ask GPT-5.6 to direct the replay from the trip evidence.
+4. Play the complete home-to-home memory with timed chapters and captions.
+5. Edit the memory and save its route card.
 
-There is no sample mode, onboarding tour, account, dashboard, or feature pitch.
+The public sample contains three trips cut from the supplied Timeline export. There is no onboarding tour, account, dashboard, or feature pitch.
 
 ## Product principles
 
@@ -28,8 +29,9 @@ There is no sample mode, onboarding tour, account, dashboard, or feature pitch.
 3. Name places before asking a person to interpret them.
 4. Recorded route geometry is solid; missing geometry is visibly different.
 5. Distance supports the story. It is never the story.
-6. GPT-5.6 organizes evidence and asks for what telemetry cannot know. It does not invent.
-7. Editing and dismissal are ordinary, visible actions.
+6. GPT-5.6 controls the replay structure and asks for what telemetry cannot know. It does not invent.
+7. A finished memory becomes a file the traveler can keep.
+8. Editing and dismissal are ordinary, visible actions.
 
 ## Voice
 

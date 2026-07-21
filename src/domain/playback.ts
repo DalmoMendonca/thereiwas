@@ -1,5 +1,5 @@
 import { haversineKm, interpolateCoordinate } from './geo'
-import type { Coordinate, TravelMode } from './types'
+import type { Coordinate, MemoryPlan, TravelMode } from './types'
 import type { RouteGeometry } from './route-reconstruction'
 
 export interface PlaybackPoint extends Coordinate {
@@ -22,7 +22,43 @@ export interface CinematicKeyframe {
   wallEnd: number
   tripStart: number
   tripEnd: number
-  kind: 'movement' | 'pause'
+  kind: 'movement' | 'pause' | 'chapter'
+}
+
+export function buildDirectedKeyframes(plan: MemoryPlan, timeline: PlaybackTimeline): CinematicKeyframe[] {
+  if (!timeline.points.length || timeline.endMs <= timeline.startMs || !plan.chapters.length) return []
+  const toProgress = (timestamp: string) => Math.max(0, Math.min(1, (Date.parse(timestamp) - timeline.startMs) / (timeline.endMs - timeline.startMs)))
+  const chapters = plan.chapters
+    .map((chapter) => {
+      const start = toProgress(chapter.start)
+      const end = Math.max(start, toProgress(chapter.end))
+      return { start, end, weight: 1.8 + Math.min(1.2, chapter.summary.length / 260) }
+    })
+    .filter((chapter) => Number.isFinite(chapter.start) && Number.isFinite(chapter.end))
+    .sort((a, b) => a.start - b.start)
+  if (!chapters.length) return []
+
+  const sections: Array<{ tripStart: number; tripEnd: number; weight: number; kind: CinematicKeyframe['kind'] }> = []
+  let tripCursor = 0
+  for (const chapter of chapters) {
+    if (chapter.end <= tripCursor) continue
+    const chapterStart = Math.max(tripCursor, chapter.start)
+    if (chapterStart > tripCursor) {
+      sections.push({ tripStart: tripCursor, tripEnd: chapterStart, weight: tripCursor === 0 ? 0.8 : 0.35, kind: 'movement' })
+    }
+    const chapterEnd = Math.max(chapterStart + 0.0001, chapter.end)
+    sections.push({ tripStart: chapterStart, tripEnd: chapterEnd, weight: chapter.weight, kind: 'chapter' })
+    tripCursor = chapterEnd
+  }
+  if (tripCursor < 1) sections.push({ tripStart: tripCursor, tripEnd: 1, weight: 0.8, kind: 'movement' })
+
+  const totalWeight = sections.reduce((sum, section) => sum + section.weight, 0) || 1
+  let wallCursor = 0
+  return sections.map((section, index) => {
+    const wallStart = wallCursor
+    wallCursor = index === sections.length - 1 ? 1 : wallCursor + section.weight / totalWeight
+    return { wallStart, wallEnd: wallCursor, tripStart: section.tripStart, tripEnd: Math.min(1, section.tripEnd), kind: section.kind }
+  })
 }
 
 export interface PlaybackState extends Coordinate {
@@ -95,7 +131,7 @@ export function mapCinematicProgress(keyframes: CinematicKeyframe[], wallProgres
   const frame = keyframes.find((item) => clamped <= item.wallEnd) ?? keyframes.at(-1)!
   const span = Math.max(0.0001, frame.wallEnd - frame.wallStart)
   const local = Math.max(0, Math.min(1, (clamped - frame.wallStart) / span))
-  const eased = frame.kind === 'pause' ? local : 1 - (1 - local) ** 2.2
+  const eased = frame.kind === 'pause' ? local : frame.kind === 'chapter' ? 1 - (1 - local) ** 1.35 : 1 - (1 - local) ** 2.2
   return frame.tripStart + (frame.tripEnd - frame.tripStart) * eased
 }
 

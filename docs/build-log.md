@@ -41,4 +41,7 @@
 
 - The current Devpost copy and 91/100 jury assessment are complete in `docs/devpost-submission.md` and `docs/judge-rubric.md`.
 - The Devpost browser session expired before the draft could be saved. GitHub and Google OAuth both require a fresh sign-in.
-- The existing video remains unchanged. A new recording is intentionally held until the final product is approved.
+- Made GPT-5.6 part of the replay engine: structured chapter boundaries now set cinematic keyframes, and timed captions appear on the active map.
+- Added a locally rendered 1080 by 1350 memory card with the completed route, summary, trip statistics, chapters or local photos, PNG download, and native sharing when supported.
+- Added acceptance coverage for the directed replay, on-map captions, and downloaded artifact. A hosted preview returned a live GPT-5.6 direction with no browser errors.
+- Recorded and verified a 1:39 H.264/AAC product demo centered on the directed replay and finished memory card. The AI-generated narration is disclosed in the closing frame.

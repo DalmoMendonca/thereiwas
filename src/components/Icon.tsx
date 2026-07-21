@@ -1,6 +1,6 @@
 import type { SVGProps } from 'react'
 
-export type IconName = 'arrow' | 'back' | 'calendar' | 'check' | 'chevron' | 'close' | 'edit' | 'flight' | 'lock' | 'map' | 'pause' | 'photo' | 'play' | 'plus' | 'route' | 'spark' | 'trash' | 'upload'
+export type IconName = 'arrow' | 'back' | 'calendar' | 'check' | 'chevron' | 'close' | 'download' | 'edit' | 'flight' | 'lock' | 'map' | 'pause' | 'photo' | 'play' | 'plus' | 'route' | 'share' | 'spark' | 'trash' | 'upload'
 
 const paths: Record<IconName, React.ReactNode> = {
   arrow: <path d="m5 12 14 0m-5-5 5 5-5 5" />,
@@ -9,6 +9,7 @@ const paths: Record<IconName, React.ReactNode> = {
   check: <path d="m5 12 4 4L19 6" />,
   chevron: <path d="m9 18 6-6-6-6" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
+  download: <><path d="M12 3v12m-5-5 5 5 5-5" /><path d="M5 18v3h14v-3" /></>,
   edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></>,
   flight: <path d="M2 16.5 22 12 2 7.5v3l14 1.5-14 1.5Z" />,
   lock: <><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
@@ -18,6 +19,7 @@ const paths: Record<IconName, React.ReactNode> = {
   play: <path d="m8 5 11 7-11 7Z" />,
   plus: <path d="M12 5v14M5 12h14" />,
   route: <><circle cx="6" cy="18" r="2" /><circle cx="18" cy="6" r="2" /><path d="M8 18h3a2 2 0 0 0 2-2V8a2 2 0 0 1 2-2h1" /></>,
+  share: <><circle cx="18" cy="5" r="2" /><circle cx="6" cy="12" r="2" /><circle cx="18" cy="19" r="2" /><path d="m8 11 8-5m-8 7 8 5" /></>,
   spark: <path d="m12 2 1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6Z" />,
   trash: <><path d="M4 7h16m-10 4v6m4-6v6M9 4h6l1 3H8Z" /><path d="m6 7 1 14h10l1-14" /></>,
   upload: <><path d="m12 16V4m-5 5 5-5 5 5" /><path d="M5 15v5h14v-5" /></>,

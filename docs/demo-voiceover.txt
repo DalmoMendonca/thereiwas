@@ -1,9 +1,15 @@
-There I Was turns a Google Maps Timeline export into trips I can replay. This sample uses a pared-down excerpt of my own Timeline: my latest trips to California, New York, and Italy. Nothing in it was made up.
+Google Timeline has years of my location data. It can tell me where I went, but it does very little with the memory. I wanted one button: Play.
 
-I will open California. The trip starts at home, follows the roads to the West Coast, and closes back at home. The gray line keeps the full route in view. When I press Play, the orange marker moves along it and the green trail shows where I have been.
+This is There I Was. I can import a standard Timeline JSON file, or try three real trips from my own export. I will open California.
 
-I can add geotagged photos from the trip. Their date and location are read in the browser. Selecting a photo moves the replay to that moment and centers its position on the map.
+This trip starts in Oklahoma, reaches the West Coast, and returns home. Timeline often records only scattered points, so There I Was preserves detailed paths and uses Mapbox Directions to rebuild sparse drives along actual roads. The map fits the complete 3,030-mile loop, not a cloud of disconnected dots.
 
-Create story sends a small, coordinate-free dossier to GPT-5.6. It contains named places, dates, travel modes, and summarized movement. The model organizes the evidence into editable chapters and asks questions only I can answer. It does not receive my Timeline file, home location, path coordinates, or photos.
+Now GPT-5.6 does something the map cannot do alone. Direct replay sends a small dossier of named places, dates, travel modes, and summarized movement. It receives no raw coordinates, home location, source file, or photos.
 
-Google collected the record. There I Was gives me a way to relive it.
+The model chooses the trip's chapters, sets their pacing, and writes grounded captions. Those timestamps change the playback itself. This is not text sitting beside the product. GPT-5.6 is directing the product.
+
+Press Play memory. The route follows the model's pacing, captions appear at the right moments, and the full loop stays visible. I can also add geotagged photos; their time and location are read locally and synchronized to the replay.
+
+When the replay ends, it leaves me with something. There I Was renders the route, dates, summary, chapters, and trip statistics into a 1080 by 1350 memory card. It is made in the browser, and I can save or share it without uploading my Timeline.
+
+Google collected the record. There I Was turns it into a memory I can replay and keep.

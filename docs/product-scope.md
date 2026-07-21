@@ -22,13 +22,15 @@ The governing principle is: **the data supplies evidence, GPT-5.6 supplies narra
 - Local EXIF photo import, map markers, filmstrip, and replay synchronization
 - Bounded Memory Dossier
 - GPT-5.6 strict structured output through a server function
-- Deterministic story fallback and correction loop
+- GPT-directed replay pacing and grounded on-map captions
+- Deterministic direction fallback and correction loop
+- Local 1080 by 1350 memory-card preview, PNG download, and native sharing
 - Responsive, keyboard-accessible judge path
 
 ## Release gate
 
-The direct-testing reset at the top of `SPECS.md` is the gate. The public sample must detect exactly California, New York, and Italy from the consented source excerpt. A judge must be able to open a tightly fitted road loop, play it, add a geotagged photo, create a GPT-5.6 story, edit a trip, reload, and recover local work.
+The direct-testing reset at the top of `SPECS.md` is the gate. The public sample must detect exactly California, New York, and Italy from the consented source excerpt. A judge must be able to open a tightly fitted road loop, direct and play a GPT-5.6 memory with captions on the map, save the finished memory card, add a geotagged photo, edit a trip, reload, and recover local work.
 
 ## Explicit non-goals
 
-No account system, cloud synchronization, SQL analytics, life-stage dashboards, hosted sharing, video export, nested trip accounting, complex media library, or every historical Google schema. These belong to the post-hackathon roadmap only after the submitted experience is stable.
+No account system, cloud synchronization, SQL analytics, life-stage dashboards, hosted memory pages, video export, nested trip accounting, or complex media library. These belong to the post-hackathon roadmap only after the submitted experience is stable.

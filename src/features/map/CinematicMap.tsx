@@ -8,10 +8,10 @@ import {
 } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { haversineKm } from '../../domain/geo'
-import { buildCinematicKeyframes, buildPlaybackTimeline, interpolatePlayback, mapCinematicProgress } from '../../domain/playback'
+import { buildCinematicKeyframes, buildDirectedKeyframes, buildPlaybackTimeline, interpolatePlayback, mapCinematicProgress } from '../../domain/playback'
 import type { RouteGeometry } from '../../domain/route-reconstruction'
 import { tripDistanceKm } from '../../domain/trip-detection'
-import type { NormalizedTimeline, TravelMode, TripRecord } from '../../domain/types'
+import type { MemoryPlan, NormalizedTimeline, TravelMode, TripRecord } from '../../domain/types'
 import { Icon } from '../../components/Icon'
 import type { DisplayTripPhoto } from '../photos/TripPhotos'
 
@@ -23,6 +23,8 @@ interface CinematicMapProps {
   photos?: DisplayTripPhoto[]
   selectedPhotoId?: string
   onPhotoChange?: (photoId: string) => void
+  memoryPlan?: MemoryPlan
+  directedPlaybackRequest?: number
 }
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron'
@@ -85,7 +87,7 @@ function modeLabel(mode: TravelMode): string {
   return labels[mode]
 }
 
-export function CinematicMap({ routes, timeline, trip, loading, photos = [], selectedPhotoId, onPhotoChange }: CinematicMapProps) {
+export function CinematicMap({ routes, timeline, trip, loading, photos = [], selectedPhotoId, onPhotoChange, memoryPlan, directedPlaybackRequest = 0 }: CinematicMapProps) {
   const container = useRef<HTMLDivElement>(null)
   const map = useRef<MapLibreMap | null>(null)
   const mapLoaded = useRef(false)
@@ -100,13 +102,19 @@ export function CinematicMap({ routes, timeline, trip, loading, photos = [], sel
   const modeText = useRef<HTMLSpanElement>(null)
   const placeText = useRef<HTMLSpanElement>(null)
   const activePhotoIdRef = useRef<string | undefined>(undefined)
+  const directedRef = useRef(false)
+  const handledDirectedRequest = useRef(0)
   const photosRef = useRef(photos)
   photosRef.current = photos
   const [playing, setPlaying] = useState(false)
   const [activePhotoId, setActivePhotoId] = useState<string>()
+  const [directed, setDirected] = useState(false)
+  const [activeChapterIndex, setActiveChapterIndex] = useState<number>()
+  const [activeCaption, setActiveCaption] = useState<string>()
 
   const playback = useMemo(() => buildPlaybackTimeline(routes), [routes])
   const keyframes = useMemo(() => buildCinematicKeyframes(routes, playback), [routes, playback])
+  const directedKeyframes = useMemo(() => memoryPlan ? buildDirectedKeyframes(memoryPlan, playback) : [], [memoryPlan, playback])
   const completeRoute = useMemo(() => fullRouteData(routes), [routes])
   const miles = Math.round(tripDistanceKm(timeline, trip) * 0.621371)
   const modeLabels = [...new Set(routes.filter((route) => route.mode !== 'unknown').map((route) => route.mode))]
@@ -245,6 +253,18 @@ export function CinematicMap({ routes, timeline, trip, loading, photos = [], sel
       .sort((a, b) => a.distance - b.distance)[0]
     if (placeText.current) placeText.current.textContent = nearest && nearest.distance < 75 ? nearest.destination.name : modeLabel(state.mode)
 
+    if (directedRef.current && memoryPlan?.chapters.length) {
+      const timestamp = Date.parse(state.timestamp)
+      const containing = memoryPlan.chapters.findIndex((chapter) => timestamp >= Date.parse(chapter.start) && timestamp <= Date.parse(chapter.end))
+      const previous = memoryPlan.chapters.reduce((selected, chapter, index) => Date.parse(chapter.start) <= timestamp ? index : selected, 0)
+      setActiveChapterIndex(containing >= 0 ? containing : previous)
+      const caption = memoryPlan.captions.reduce<{ timestamp: string; text: string } | undefined>((selected, item) => Date.parse(item.timestamp) <= timestamp ? item : selected, undefined)
+      setActiveCaption(caption?.text)
+    } else {
+      setActiveChapterIndex(undefined)
+      setActiveCaption(undefined)
+    }
+
     const photo = photos.filter((item) => Date.parse(item.capturedAt) <= Date.parse(state.timestamp)).at(-1)
     if (photo && activePhotoIdRef.current !== photo.id) {
       activePhotoIdRef.current = photo.id
@@ -261,7 +281,7 @@ export function CinematicMap({ routes, timeline, trip, loading, photos = [], sel
       ;(map.current?.getSource('route-progress') as GeoJSONSource | undefined)?.setData(progressData(progressed))
       ;(map.current?.getSource('route-marker') as GeoJSONSource | undefined)?.setData(markerData(state))
     }
-  }, [onPhotoChange, photos, playback, trip.destinations])
+  }, [memoryPlan, onPhotoChange, photos, playback, trip.destinations])
 
   useEffect(() => {
     updateVisuals(0)
@@ -271,13 +291,26 @@ export function CinematicMap({ routes, timeline, trip, loading, photos = [], sel
   const tick = useCallback((now: number) => {
     const elapsed = now - animationStartedAt.current
     const wallProgress = Math.min(1, animationStartProgress.current + elapsed / 30_000)
-    updateVisuals(mapCinematicProgress(keyframes, wallProgress), now)
+    const activeKeyframes = directedRef.current && directedKeyframes.length ? directedKeyframes : keyframes
+    updateVisuals(mapCinematicProgress(activeKeyframes, wallProgress), now)
     if (wallProgress >= 1) {
       setPlaying(false)
       return
     }
     animationFrame.current = requestAnimationFrame(tick)
-  }, [keyframes, updateVisuals])
+  }, [directedKeyframes, keyframes, updateVisuals])
+
+  const beginPlayback = useCallback((useDirection: boolean) => {
+    cancelAnimationFrame(animationFrame.current)
+    const shouldRestart = progressValue.current >= 0.999 || useDirection !== directedRef.current
+    directedRef.current = useDirection
+    setDirected(useDirection)
+    if (shouldRestart) updateVisuals(0)
+    animationStartProgress.current = shouldRestart ? 0 : progressValue.current
+    animationStartedAt.current = performance.now()
+    setPlaying(true)
+    animationFrame.current = requestAnimationFrame(tick)
+  }, [tick, updateVisuals])
 
   const togglePlayback = useCallback(() => {
     if (playing) {
@@ -285,18 +318,22 @@ export function CinematicMap({ routes, timeline, trip, loading, photos = [], sel
       setPlaying(false)
       return
     }
-    if (progressValue.current >= 0.999) updateVisuals(0)
-    animationStartProgress.current = progressValue.current >= 0.999 ? 0 : progressValue.current
-    animationStartedAt.current = performance.now()
-    setPlaying(true)
-    animationFrame.current = requestAnimationFrame(tick)
-  }, [playing, tick, updateVisuals])
+    beginPlayback(Boolean(memoryPlan && directedKeyframes.length))
+  }, [beginPlayback, directedKeyframes.length, memoryPlan, playing])
+
+  useEffect(() => {
+    if (!memoryPlan || directedPlaybackRequest <= 0 || directedPlaybackRequest <= handledDirectedRequest.current) return
+    handledDirectedRequest.current = directedPlaybackRequest
+    beginPlayback(true)
+  }, [beginPlayback, directedPlaybackRequest, memoryPlan])
 
   const scrub = (value: number) => {
     cancelAnimationFrame(animationFrame.current)
     setPlaying(false)
     updateVisuals(value)
   }
+
+  const activeChapter = activeChapterIndex === undefined ? undefined : memoryPlan?.chapters[activeChapterIndex]
 
   useEffect(() => {
     if (!selectedPhotoId || selectedPhotoId === activePhotoIdRef.current || !playback.points.length) return
@@ -335,6 +372,13 @@ export function CinematicMap({ routes, timeline, trip, loading, photos = [], sel
           <span><span ref={dateText} /> <span ref={timeText} /> · <span ref={modeText}>Ready</span></span>
         </div>
         <button className="fit-route" type="button" onClick={fitRoute}>Fit route</button>
+        {directed && activeChapter && (
+          <article className="map-story-caption" aria-live="polite">
+            <span>{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(activeChapter.start))}</span>
+            <strong>{activeChapter.title}</strong>
+            <p>{activeCaption ?? activeChapter.summary}</p>
+          </article>
+        )}
         {activePhotoId && (() => {
           const photo = photos.find((item) => item.id === activePhotoId)
           if (!photo) return null
@@ -356,9 +400,9 @@ export function CinematicMap({ routes, timeline, trip, loading, photos = [], sel
           <div><span>Travel</span><strong>{travelModes}</strong></div>
         </div>
         <div className="replay-controls">
-          <button className="play-button" onClick={togglePlayback} disabled={!playback.points.length} aria-label={playing ? 'Pause replay' : progressValue.current >= 0.999 ? 'Replay trip' : 'Play trip'}>
+          <button className="play-button" onClick={togglePlayback} disabled={!playback.points.length} aria-label={playing ? 'Pause replay' : memoryPlan ? 'Play GPT-5.6 memory' : progressValue.current >= 0.999 ? 'Replay trip' : 'Play trip'}>
             <Icon name={playing ? 'pause' : 'play'} />
-            {playing ? 'Pause' : progressValue.current >= 0.999 ? 'Replay' : 'Play'}
+            {playing ? 'Pause' : memoryPlan ? 'Play memory' : progressValue.current >= 0.999 ? 'Replay' : 'Play'}
           </button>
           <input
             ref={progressInput}
@@ -371,7 +415,7 @@ export function CinematicMap({ routes, timeline, trip, loading, photos = [], sel
             onChange={(event) => scrub(Number(event.target.value))}
             aria-label="Replay position"
           />
-          <span>30 seconds</span>
+          <span>{memoryPlan ? 'GPT-5.6 directed · 30 sec' : '30 seconds'}</span>
         </div>
       </aside>
     </section>

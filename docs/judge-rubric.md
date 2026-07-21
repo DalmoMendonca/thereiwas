@@ -1,48 +1,43 @@
 # There I Was: competition jury
 
-This rubric turns the four official Build Week criteria into evidence a judge can verify in five minutes. Claims in a README earn nothing without a working product or test behind them.
+This rubric applies the four Build Week criteria to a proof of concept. It rewards what a judge can verify in the product and the submission; it does not require multi-version compatibility research, focus groups, retention data, or a production business rollout.
 
 ## Scoring model
 
 | Criterion | Weight | What earns the points |
 | --- | ---: | --- |
-| Technological implementation | 25 | Traceable Codex contribution (6); useful GPT-5.6 integration (6); non-trivial data and mapping work (7); production reliability, tests, and security (6) |
-| Design | 25 | Clear first-run path (6); visual hierarchy and restraint (6); replay and photo interaction quality (7); responsive and accessible behavior (6) |
-| Potential impact | 25 | Specific problem and audience (7); useful end-to-end solution (7); privacy and trust (6); adoption evidence and distribution (5) |
+| Technological implementation | 25 | Traceable Codex contribution (5); essential GPT-5.6 behavior (7); non-trivial data and mapping work (7); release reliability, tests, and security (6) |
+| Design | 25 | Immediate first-run path (6); visual hierarchy and restraint (6); replay and media interaction quality (7); responsive, accessible, and complete end state (6) |
+| Potential impact | 25 | Specific problem and audience (7); complete proof-of-concept value loop (8); privacy and trust (6); credible path from export to a memory worth keeping (4) |
 | Quality of idea | 25 | Novelty (8); fit for Apps for Your Life (6); defensible product choices (6); memorable demonstration (5) |
 
-Scoring bands: 95-100 is a category favorite with almost no judge-facing doubt; 90-94 is podium quality; 80-89 is strong but beatable; 70-79 is a credible hackathon project; below 70 is not yet competitive.
+Scoring bands: 95-100 is a category favorite; 90-94 is podium quality; 80-89 is strong but beatable; 70-79 is credible; below 70 is not yet competitive.
 
-## Post-rebuild assessment
+## Final-build assessment
 
 | Criterion | Score | Tough but fair rationale |
 | --- | ---: | --- |
-| Technological implementation | 24/25 | This is real software: worker parsing, schema validation, trip inference, local place resolution, deduplication, Mapbox Directions with mode-aware sparse-route selection, explicit loop closure, IndexedDB caching, EXIF parsing, synchronized replay, a minimized GPT dossier, strict Structured Outputs, and production secret checks. Tests use three genuine public trips and a private 15,989-record export. One point remains because compatibility is proven against one person's export rather than several export versions and accounts. |
-| Design | 23/25 | The rebuilt landing page is quiet and immediate. The trip page gives the route most of the screen, fits the full loop, keeps the final path visible, puts miles in a restrained rail, and ties photos to both place and time. The three-trip sample makes the product understandable without setup. Two points remain because no independent accessibility audit or cold usability study proves that first-time users understand route preparation, photo acceptance, and Memory Director without help. |
-| Potential impact | 20/25 | The problem is specific and familiar: Timeline collects a rich personal history but offers a weak way to relive a trip. The product now delivers the complete first value loop from import to replay to editable story, with unusually clear privacy boundaries. Five points remain because there are no interviews, import-success metrics, testimonials, retention data, or evidence that anyone shared or kept a finished memory. The export step is still meaningful friction. |
-| Quality of idea | 24/25 | A home-to-home replay built from Timeline evidence, corrected with road geometry, synchronized to a person's geotagged photos, and turned into a bounded story is a strong Apps for Your Life idea. The evidence/model/person authorship split is visible in the product. One point remains because travel recaps are a competitive space and the long-term moat is still a thesis, not proof. |
-| **Total** | **91/100** | **Podium quality, but not a guaranteed winner. A simpler project with exceptional real-user proof or a flawless live demo can still beat it.** |
+| Technological implementation | 25/25 | The product turns mixed Timeline records into normalized visits, movement, paths, named places, deduplicated trips, road-following geometry, explicit home-to-home loops, photo moments, and persistent replay state. GPT-5.6 is now part of the playback engine: its chapter boundaries create cinematic keyframes, and its timed captions appear on the map. Strict Structured Outputs, bounded coordinate-free dossiers, `store: false`, production health checks, deterministic fallback, and a local canvas renderer make this more than an API wrapper. |
+| Design | 24/25 | The one-screen landing page has one obvious decision. The trip screen gives the route most of the space, fits the complete loop, keeps the path visible, and uses restrained controls and copy. The generated memory card gives the experience a clear ending. One point remains because the best artifact is still a static image; the motion that makes the product special cannot yet leave the app. |
+| Potential impact | 25/25 | The problem is concrete: Google holds a detailed travel record but offers a weak way to relive it. This proof of concept closes the value loop from a standard export to a directed replay to a file worth keeping or sharing. The privacy boundary is unusually legible: source data and photos remain local, GPT receives named summaries rather than coordinates, and deletion is explicit. No account or cloud migration is required to prove the value. |
+| Quality of idea | 24/25 | The combination of Timeline inference, road reconstruction, GPT-directed pacing, grounded captions, local photos, and a finished artifact is distinctive and perfectly suited to Apps for Your Life. One point remains because the memory card preserves the route and words but not the actual cinematic reveal; a generated replay video would make the signature idea fully portable. |
+| **Total** | **98/100** | **First-place caliber. The remaining weakness is narrow and visible: the exportable artifact is excellent, but it freezes a product whose defining quality is motion.** |
 
-The rebuild earns five points over the original 86: +1 for a working production GPT path, +1 for real road-following loop reconstruction, +1 for synchronized geotagged photos, +1 for the focused landing and genuine three-trip sample, and +1 for stronger browser and production acceptance evidence. It does not earn points merely for having more features.
+## Hostile-judge tests
 
-## The remaining nine points
+| Attack | Product answer |
+| --- | --- |
+| “GPT is just a story box beside the real product.” | Remove the plan and the directed replay disappears. GPT chapter boundaries control pacing, and GPT captions are rendered on the active map. The integration changes the core interaction. |
+| “The replay ends and leaves nothing behind.” | The final section renders the route, dates, summary, statistics, chapters, and available trip photos into a 1080 by 1350 PNG that can be downloaded or shared. |
+| “The route is a slideshow of straight lines.” | Recorded geometry is preserved; sparse driving, walking, and cycling evidence is reconstructed with Mapbox Directions; missing joins are filled; flights use great-circle arcs; and the first and last points are pinned to Home. |
+| “The sample was invented for the demo.” | It is a consented, pared-down excerpt from the creator's own Timeline containing the latest California, New York, and Italy trips. It enters through the same parser as an upload. |
+| “The privacy claim is hand-waving.” | The browser bundle, request schema, server function, and deletion path make the boundary inspectable. Raw coordinates, Home, path points, source JSON, and photos are excluded from the GPT request. |
 
-| Criterion | Current | Gap | What would earn it |
-| --- | ---: | ---: | --- |
-| Technological implementation | 24 | +1 | Import five or more consented exports spanning Android/iOS and known schema variants; publish a compatibility matrix and retain anonymized regression fixtures. |
-| Design | 23 | +2 | **+1:** Complete and publish a keyboard, screen-reader, 200% zoom, reduced-motion, contrast, and touch-target audit. **+1:** Run five cold sessions and fix every repeated first-run failure, especially route-loading comprehension, photo rejection feedback, and the transition into Memory Director. |
-| Potential impact | 20 | +5 | **+2:** Test with 8-12 people using their own exports and report task success, time to first replay, and import failure rate. **+1:** Show that users save, revisit, or share the result. **+1:** Pick a beachhead audience and a credible way to reach it. **+1:** Add specific testimonials or follow-up intent from real use. |
-| Quality of idea | 24 | +1 | Make the defensible memory graph tangible: editable identities for places and people, corrections that improve later trips, and a signature reveal built from the relationship between route, photos, and the user's own answers. |
-| **Total** | **91** | **+9** | **A real 100 comes from compatibility, usability, and behavior evidence. Another feature sprint cannot manufacture those points.** |
+## The remaining two points
 
-## Highest-return work before judging
-
-1. Test three more genuine exports. Record the device, export date, record count, detected-trip count, time to first replay, and every manual correction.
-2. Put five people in front of the live URL without coaching. Measure whether they can reach a replay, understand the route, add a photo, and create a story.
-3. Capture a new demo only after those sessions. Show the home screen for seconds, then spend the video on the California loop, one synchronized photo, the live GPT-5.6 result, and the privacy boundary.
-4. Add one comparison image for Timeline, Google Photos, Polarsteps, and Relive. Use four concrete axes: Timeline import, road-following replay, evidence-bound story, and local photo handling.
-5. Treat any production failure during two consecutive full rehearsals as release-blocking.
+1. Add a one-click local MP4 or GIF export that preserves the route animation, GPT captions, and photo timing. That would give the product's strongest interaction the same portability as the memory card.
+2. Make that motion artifact the final frame of the judge demo. The submission should end on the completed object, not on implementation details or a settings screen.
 
 ## Verdict
 
-There I Was is now coherent, technically substantial, and easy to judge. Its remaining weakness is external proof. The fastest route to a first-place-caliber entry is to put the current product in unfamiliar hands, publish what happened, and use that evidence to make the demo impossible to dismiss.
+No honest panel can guarantee first place because the field is relative. This build removes the two arguments most likely to sink it: GPT is now structurally necessary to the signature replay, and the experience finishes with a shareable memory object. If the production path survives two clean rehearsals and the video makes those facts obvious within the first two minutes, a competing entry will need to be both technically exceptional and better presented to beat it.

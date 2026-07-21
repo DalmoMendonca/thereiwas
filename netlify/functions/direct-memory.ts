@@ -88,6 +88,9 @@ Rules:
 - Use the supplied city, region, and country names. Never write "unnamed stop" or expose coordinates as prose.
 - Prefer arrivals, departures, changes in travel mode, and time spent in named places. Distance is supporting evidence, not the story.
 - Preserve every meaningful uncertainty. If evidence is weak, say so.
+- Chapters set the replay pacing. Choose three to five chronological chapters whose start and end timestamps focus the replay on meaningful arrivals, stays, and transitions while preserving the whole trip.
+- Captions appear directly on the map during playback. Write concise captions at useful timestamps and ground every one to destination or leg IDs in the dossier.
+- Return three to five highlights, four to seven captions, two reflection questions, and no more than four uncertainty notes.
 - Every factual highlight and caption needs grounding IDs copied from destination or leg IDs in the dossier.
 - Reflection questions must ask for human meaning the telemetry cannot know.
 - Return a concise plan sized for a three-minute product experience.`
@@ -140,7 +143,7 @@ export const handler: Handler = async (event) => {
       instructions,
       input: JSON.stringify(dossier),
       text: { format: zodTextFormat(memoryPlanSchema, 'memory_plan'), verbosity: 'low' },
-      max_output_tokens: 1600,
+      max_output_tokens: 2600,
     })
     const parsed = result.output_parsed
     if (!parsed) throw new Error('Structured response was empty.')

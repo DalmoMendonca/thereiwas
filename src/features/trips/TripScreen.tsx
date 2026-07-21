@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '../../app/store'
 import { BrandMark } from '../../components/BrandMark'
 import { Icon } from '../../components/Icon'
 import { buildTripRoutes, type RouteGeometry } from '../../domain/route-reconstruction'
 import { parseTripPhotos } from '../../domain/photo-metadata'
-import type { TripPhoto } from '../../domain/types'
+import type { MemoryPlan, TripPhoto } from '../../domain/types'
 import { deleteTripPhoto, getRouteCache, loadTripPhotos, saveTripPhotos, setRouteCache } from '../../storage/database'
 import { CinematicMap } from '../map/CinematicMap'
 import { MemoryDirector } from '../memory-director/MemoryDirector'
@@ -26,6 +26,8 @@ export function TripScreen() {
   const [routes, setRoutes] = useState<RouteGeometry[]>([])
   const [routeLoading, setRouteLoading] = useState(true)
   const [directorActive, setDirectorActive] = useState(false)
+  const [memoryPlan, setMemoryPlan] = useState<MemoryPlan>()
+  const [directedPlaybackRequest, setDirectedPlaybackRequest] = useState(0)
   const [editing, setEditing] = useState(false)
   const [photos, setPhotos] = useState<TripPhoto[]>([])
   const [selectedPhotoId, setSelectedPhotoId] = useState<string>()
@@ -88,6 +90,15 @@ export function TripScreen() {
     if (selectedPhotoId === photoId) setSelectedPhotoId(undefined)
   }
 
+  const activateDirector = useCallback(() => setDirectorActive(true), [])
+  const playMemory = useCallback(() => {
+    setDirectedPlaybackRequest((request) => request + 1)
+    document.querySelector('.trip-replay')?.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'start',
+    })
+  }, [])
+
   return (
     <main className="trip-screen">
       <nav className="trip-nav">
@@ -110,7 +121,7 @@ export function TripScreen() {
         </section>
       )}
 
-      <CinematicMap routes={routes} timeline={timeline} trip={trip} loading={routeLoading} photos={displayPhotos} selectedPhotoId={selectedPhotoId} onPhotoChange={setSelectedPhotoId} />
+      <CinematicMap routes={routes} timeline={timeline} trip={trip} loading={routeLoading} photos={displayPhotos} selectedPhotoId={selectedPhotoId} onPhotoChange={setSelectedPhotoId} memoryPlan={memoryPlan} directedPlaybackRequest={directedPlaybackRequest} />
 
       <TripPhotos photos={displayPhotos} selectedPhotoId={selectedPhotoId} notice={photoNotice} onAdd={(files) => void addPhotos(files)} onSelect={setSelectedPhotoId} onRemove={(photoId) => void removePhoto(photoId)} />
 
@@ -123,7 +134,7 @@ export function TripScreen() {
         </details>
       </div>
 
-      <MemoryDirector timeline={timeline} trip={trip} active={directorActive} onActivate={() => setDirectorActive(true)} />
+      <MemoryDirector timeline={timeline} trip={trip} active={directorActive} onActivate={activateDirector} routes={routes} photos={displayPhotos} onPlanChange={setMemoryPlan} onPlay={playMemory} />
 
       <div className="trip-actions">
         {trip.source === 'detected' && trip.status === 'proposed' && <button className="button-secondary" onClick={() => void updateTrip(trip.id, { status: 'confirmed' })}>Keep trip</button>}

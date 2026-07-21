@@ -40,7 +40,7 @@ The map is the only visually complex surface. It shows the whole trip at once, p
 
 - Landing: exactly one viewport; centered import action; no scroll.
 - Trips: one chronological ledger with title, significant-place trail, and compact date range.
-- Trip: title, dominant replay, small side statistics, destination line, collapsed evidence, optional story, and plain authority actions.
+- Trip: title, dominant replay, small side statistics, photo sync, GPT-directed chapters, a memory card, collapsed evidence, and plain authority actions.
 - Mobile: the map stays first; statistics and controls move directly below it.
 
 ## Type
@@ -62,8 +62,9 @@ The camera does not chase the marker. It fits the entire trip, because understan
 - Secondary controls: paper background with a one-pixel rule.
 - Destructive actions: red text, never a filled primary button.
 - Editing: inline and reversible.
-- Story: structured fields and chapters, not chat.
+- Direction: structured fields and chapters, not chat. The generated chapter timing and captions appear on the map during replay.
+- Artifact: a restrained 4:5 card containing the final loop, edited memory line, trip facts, and optional photos.
 
 ## Copy rules
 
-Say what the control does. Prefer “Import Timeline JSON,” “Create trip,” “Play,” and “Create story.” Avoid metaphors, claims of magic, privacy speeches, fake intimacy, and explanations of implementation details unless a user opens the relevant disclosure.
+Say what the control does. Prefer “Import Timeline JSON,” “Create trip,” “Direct replay,” “Play memory,” and “Save PNG.” Avoid metaphors, claims of magic, privacy speeches, fake intimacy, and explanations of implementation details unless a user opens the relevant disclosure.
