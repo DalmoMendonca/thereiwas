@@ -4,72 +4,87 @@ Project: There I Was
 
 Category: Apps for Your Life
 
-Tagline: Replay the trips hidden in your Google Timeline.
+Tagline: Turn a Google Timeline export into a trip replay you can direct, play, and keep.
 
 Live demo: https://thereiwas.dalmo.ai
 
 Repository: https://github.com/DalmoMendonca/thereiwas
 
-Demo video: https://youtu.be/P7AgqQWPYRE — 1:40, 1600 by 900, H.264/AAC
+Demo video: https://youtu.be/P7AgqQWPYRE (1:40, 1600 by 900, H.264/AAC)
+
+Project thumbnail: `output/devpost/03-directed-route.png`
 
 Primary Codex Session ID: `019f7d6c-353b-7853-ac63-2a3e617a1587`
 
+Contributor note: I designed and built There I Was end to end: Timeline parsing, trip detection, route reconstruction, GPT-5.6 direction, replay, EXIF photo sync, and memory-card export.
+
 ## Project story
 
-### I wanted to press Play
+### I wanted a Play button for my Timeline
 
-Google Timeline knows where I went, how long I stayed, and how I moved. I am fine with that collection. The bargain bothered me: years of detailed personal data, and the product still mostly gives me a log.
+Google Maps has years of my movements. Timeline can tell me where I stopped and how I got there, but revisiting a vacation still feels like reading a database. I wanted to watch the trip happen again.
 
-There I Was turns a current Google Maps Timeline export into trips I can replay. It finds each stretch between leaving home and returning home, names the cities where I spent meaningful time, and rebuilds the route. The finished map is a loop. Press Play and an orange marker follows the road while a green line records the path behind it.
+There I Was imports a Google Maps Timeline JSON file, finds each trip between leaving Home and returning, names the places where I spent time, and rebuilds the route. The whole loop stays in view. An orange marker moves along the road while the path behind it turns green.
 
-GPT-5.6 handles the part telemetry cannot do well on its own. It turns the evidence into chapters, sets the replay pacing, and writes the captions that appear on the map. It can ask questions that only the traveler can answer, but it cannot invent the answers. The model directs. The person keeps authorship.
+The included sample comes from my supplied Timeline export. It contains three trips: California, New York, and Italy. Every location and date in the sample came from that export.
 
-### Try three trips from my own Timeline
+### Start with California
 
-The landing page has two choices: import a Timeline JSON file or try the sample. The sample is a pared-down, consented excerpt from my export with my latest California, New York, and Italy trips. I removed every other trip and kept the same raw record shapes used by the normal importer. The app does not ship a fictional vacation.
+California is the fastest judge path. It covers 3,030 miles, 23 nights, and nine named places on a road trip from Oklahoma to the West Coast and back.
 
-California is the quickest judge path. The app finds a 23-night road trip from Oklahoma to the West Coast and back. Open it and the map fits the full route as tightly as possible. Sparse activity records are sent to Mapbox Directions, so interstate drives follow roads instead of drawing straight chords between Google samples. Recorded high-detail paths keep their original geometry. Missing joins are rebuilt, and route results are cached locally.
+1. Click `Try with Sample Data`.
+2. Open `California` and wait for the route to finish preparing.
+3. Click `Direct replay`.
+4. When GPT-5.6 finishes, click `Play memory` and watch the chapters change on the map.
 
-Photos are optional. Add a set from the trip and the browser reads their EXIF capture time and GPS position. Accepted photos appear as map points and a small filmstrip. Selecting one scrubs the replay to its time; playback brings each image into a restrained viewport when the marker reaches that part of the trip. Photo bytes stay on the device.
+The replay ends with a 1080 by 1350 memory card containing the loop, dates, trip facts, and directed chapters. Save it as a PNG or use the browser share sheet.
 
-### The Timeline work happens in the browser
+### GPT-5.6 is the director
 
-The current mobile export is a top-level array mixing visits, activities, path samples, and Timeline Memories. A Web Worker validates each record independently with Zod, quarantines malformed entries, normalizes timestamps and numeric strings, rebuilds path timestamps from minute offsets, and removes duplicate visit hierarchies.
+The model receives a compact Memory Dossier with named places, dates, time spent, travel modes, summarized movements, coverage gaps, and any answers the traveler supplied. The request is limited to that dossier; coordinates, Home, raw path points, source JSON, unrelated dates, and photo bytes remain in the browser.
 
-An offline GeoNames index turns coordinates into cities, regions, and countries. Semantic Home visits define trip boundaries. The detector ignores short routine gaps, guards against relocations, groups meaningful destinations, and deduplicates exact date ranges. That is how the trip list gets useful titles such as California, Oklahoma City, and Italy instead of 28 copies of "A journey away from home."
+A Netlify Function validates the dossier, calls `gpt-5.6` through the OpenAI Responses API, and requests a strict Zod-backed Structured Output. Requests use `store: false`. GPT-5.6 returns three to five chronological chapters, replay pacing, and timestamped captions. Chapter boundaries become map keyframes, and each caption appears on the route at its assigned time. The model can also ask questions that location data cannot answer. The traveler can edit every title and sentence.
 
-The replay uses one clock for route progress, marker position, local date and time, travel mode, and photo moments. MapLibre renders OpenFreeMap tiles. Ground routes come from recorded Timeline evidence or Mapbox Directions. Flights use great-circle arcs when the export identifies them. Every trip is explicitly closed at Home.
+That output is the replay plan. It controls the product's main interaction and supplies the language saved into the final memory card.
 
-IndexedDB stores the normalized Timeline, trip edits, route cache, prior directions, photos, and last view. Reloading restores the work. Deleting imported data clears every store.
+### Rebuilding a trip from a noisy export
 
-### GPT-5.6 directs the map
+The current mobile export is a top-level array that mixes visits, activities, path samples, and Timeline Memories. A Web Worker validates records one at a time with Zod, quarantines malformed entries, normalizes timestamps and numeric strings, rebuilds path timing from minute offsets, and removes duplicate visit hierarchies.
 
-When the user clicks **Direct replay**, the browser builds a compact Memory Dossier for that trip. It contains named places, dates, time spent, summarized movements, travel modes, coverage gaps, and answers the user typed. It contains no coordinates, home location, raw path points, source JSON, unrelated dates, or photo bytes.
+An offline GeoNames index turns coordinates into city, region, and country names. Home visits define trip boundaries. The detector ignores routine gaps, guards against relocations, groups meaningful destinations, and removes duplicate date ranges. That work produces a short trip list with useful titles instead of a dump of coordinates.
 
-A Netlify Function validates the dossier, calls the OpenAI Responses API through the official JavaScript SDK, requests a strict Zod-backed Structured Output from `gpt-5.6`, and validates the answer again. Every request uses `store: false`. The model returns three to five chronological chapters and timestamped captions. Those boundaries become replay keyframes, and the matching caption appears directly on the route as it plays. The instructions forbid invented activities, companions, purpose, emotion, weather, and events. If the provider fails or times out, the app returns a deterministic direction from the same named evidence.
+Recorded Timeline geometry stays intact. Sparse driving, walking, and cycling legs go through Mapbox Directions so they follow roads. Flights use great-circle arcs when the export identifies them. The first and last point of every trip is Home, which keeps the route honest and closes the loop.
 
-The result does not end as another text panel. A local canvas renderer combines the completed route, dates, summary, trip statistics, and directed chapters or geotagged photos into a 1080 by 1350 memory card. The traveler can save it as a PNG or use the browser's native share sheet. The card never leaves the device unless the traveler chooses to share it.
+Photos are optional. The browser reads EXIF capture time and GPS data, then places accepted photos on the map and in a filmstrip. Selecting a photo moves the replay to its timestamp. Playback brings the photo into view when the route reaches that moment. The photo bytes remain on the device.
 
-The production failure I am happiest to have caught was painfully ordinary: the OpenAI key existed in my local `.env` but had never been added to the deployed Netlify contexts. The UI fell back correctly, which hid the deployment mistake. I added an explicit health response, fixed the production and preview secrets, extended the client budget within Netlify's 60-second function limit, and ran a live acceptance call. It returned a validated four-chapter GPT-5.6 direction with nine named destinations and no "Unnamed stop."
+IndexedDB stores the normalized Timeline, trip edits, route cache, prior directions, photos, and last view. Deleting imported data clears every store.
 
-### Built with Codex, including the ugly parts
+### Codex built it with me
 
-I used one primary Codex task for the product contract, implementation, browser inspection, debugging, deployment, and this submission. The public collaboration log records the mistakes instead of sanding them away.
+I used one primary Codex task for the product contract, implementation, browser testing, debugging, deployment, and submission work. The first build exposed duplicate trip ranges, generic titles, a useless stop list, a badly fitted map, and straight lines between sparse points. Each browser pass turned one of those defects into a concrete fix.
 
-The first version had duplicate trip ranges, generic titles, a useless stop list, a map zoomed too far out, and routes that looked like a child connected dots with a ruler. Browser screenshots forced each correction. The current route classifier measures the gaps between recorded points, sends sparse driving, walking, and cycling evidence through Directions, reconstructs missing joins, and asserts that the first and last coordinates are Home. Another production-only bug came from the default Vite minifier and left the map bundle throwing errors; switching the release build to esbuild fixed it.
+The ugliest production bug was ordinary. My local OpenAI key worked, but the deployed function did not have it. A healthy fallback hid the missing secret. I added an explicit health response, configured production and preview contexts, adjusted the request budget within Netlify's function limit, and ran a live acceptance call. It returned a validated GPT-5.6 plan covering all nine named destinations.
 
-Codex also wrote the tests that keep these fixes from slipping. The public sample must produce exactly three trips with the expected dates. A private acceptance run imports 15,989 records and requires 28 unique named trips. Unit tests cover loop closure and EXIF handling. The browser suite checks the one-screen landing page, sample import, real private import, route replay, and responsive layouts. A production scan fails if the OpenAI secret appears in browser assets.
+The tests now require the public sample to produce exactly three trips with the expected dates. A private acceptance run imports 15,989 records and finds 28 unique named trips. Unit tests cover loop closure, route reconstruction, GPT plan validation, and EXIF handling. Playwright checks the one-screen landing page, sample import, private import, route replay, the saved artifact, and responsive layouts. A production scan fails if a private OpenAI key appears in browser assets.
 
-### What remains
+### The honest edges
 
-The importer is tuned for the current Google Maps mobile export. Older Takeout formats need adapters. First-time reconstruction of a long route can take several seconds, though the cache makes later visits immediate. The offline city index can choose a nearby city for a small town or neighborhood.
+The importer targets the current Google Maps mobile export. Older Takeout formats still need adapters. A long route can take several seconds to build the first time, then the local cache makes later visits faster. The offline city index occasionally chooses a nearby city for a neighborhood or small town.
 
-The next release should let users correct place labels and export the directed replay as video. The current Build Week version completes the first memory loop: open a trip, direct the map, watch the whole route, and keep the finished card.
+Place-label correction and directed video export are next. The Build Week version completes the full loop today: import a trip, direct the replay, play it, and keep the finished memory card.
 
 ## Built with
 
-React, TypeScript, Vite, GPT-5.6, OpenAI Responses API, Codex, Zod, Web Workers, IndexedDB, Zustand, MapLibre GL JS, Mapbox Directions API, OpenFreeMap, GeoNames, exifr, Netlify Functions, Vitest, Playwright
+React, TypeScript, Vite, GPT-5.6, OpenAI Responses API, Structured Outputs, Codex, Zod, Web Workers, IndexedDB, Zustand, MapLibre GL JS, Mapbox Directions API, OpenFreeMap, GeoNames, exifr, Netlify Functions, Vitest, Playwright
 
 ## Judge testing note
 
-Open https://thereiwas.dalmo.ai and click **Try with Sample Data**. Open California and wait for the road loop to finish preparing. Click **Direct replay**, wait for the live GPT-5.6 confirmation, and then click **Play memory**. Its chapters control the replay and its captions appear on the map. Finish by clicking **Save PNG** under **Your memory card**. Add geotagged photos only if you want to test the optional local photo sync.
+Open https://thereiwas.dalmo.ai and click `Try with Sample Data`. Open `California` and wait for the route to finish preparing. Click `Direct replay`. When the page says `GPT-5.6 directed the replay`, click `Play memory`. Watch at least one chapter change on the map, then scroll to `Your memory card` and click `Save PNG`. No account or API key is required.
+
+## Gallery order and captions
+
+1. `03-directed-route.png`: GPT-5.6 turns the trip into timed chapters and captions that play on the map.
+2. `04-gpt-direction.png`: Five editable chapters set the pace for a 23-night California road trip.
+3. `05-memory-card.png`: The replay ends with a 1080 by 1350 memory card you can save or share.
+4. `02-three-trips.png`: One Timeline export, three trips: California, New York, and Italy.
+5. `01-landing.png`: Import a Google Timeline JSON file, or try three trips from the included sample.
