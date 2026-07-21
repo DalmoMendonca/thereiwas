@@ -10,7 +10,7 @@ Live demo: https://thereiwas.dalmo.ai
 
 Repository: https://github.com/DalmoMendonca/thereiwas
 
-Demo video: `output/demo/there-i-was-build-week.mp4` — 1:39, 1600 by 900, H.264/AAC (upload URL pending)
+Demo video: https://youtu.be/P7AgqQWPYRE — 1:40, 1600 by 900, H.264/AAC
 
 Primary Codex Session ID: `019f7d6c-353b-7853-ac63-2a3e617a1587`
 
